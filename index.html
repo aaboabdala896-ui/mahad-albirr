@@ -1,0 +1,695 @@
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;500;600;700&display=swap');
+
+#albirr-root {
+  --ink: #1c2620; --paper: #faf6ec; --paper-2: #f2ead6;
+  --green-950: #0e2b22; --green-900: #123a2d; --green-700: #1f5c46; --green-600: #2d7a5c;
+  --gold: #b8892b; --gold-light: #d9b25f; --line: #d8cba9; --danger: #a3402f;
+  font-family: 'Cairo', sans-serif; direction: rtl; color: var(--ink); background: var(--paper);
+  min-height: 100%; position: relative; font-size: 15px; line-height: 1.6;
+}
+#albirr-root * { box-sizing: border-box; }
+#albirr-root button { font-family: inherit; cursor: pointer; }
+#albirr-root input, #albirr-root select { font-family: inherit; }
+
+.ab-login {
+  min-height: 560px; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 15% 20%, rgba(184,137,43,.10), transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(31,92,70,.12), transparent 45%), var(--paper);
+  padding: 32px 16px;
+}
+.ab-login-card { width: 100%; max-width: 380px; background: var(--paper); border: 1px solid var(--line); padding: 32px 26px; position: relative; }
+.ab-login-card::before { content: ''; position: absolute; inset: 8px; border: 1px solid var(--gold-light); pointer-events: none; }
+.ab-emblem { width: 64px; height: 64px; border-radius: 999px; background: var(--green-900); border: 2px solid var(--gold);
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--gold-light);
+  font-family: 'Amiri', serif; font-size: 28px; font-weight: 700; }
+.ab-login-title { font-family: 'Amiri', serif; font-weight: 700; font-size: 22px; text-align: center; color: var(--green-950); margin: 0 0 2px; }
+.ab-login-sub { text-align: center; color: #6b6353; font-size: 12.5px; margin: 0 0 20px; }
+.ab-tabs { display: flex; margin-bottom: 18px; border: 1px solid var(--line); }
+.ab-tabs button { flex: 1; padding: 8px; background: #fff; border: none; font-size: 13px; color: #6b6353; }
+.ab-tabs button.active { background: var(--green-900); color: #fff; }
+.ab-field { margin-bottom: 12px; }
+.ab-field label { display: block; font-size: 12.5px; color: #4b4536; margin-bottom: 5px; }
+.ab-field input, .ab-field select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); background: #fff; font-size: 14px; color: var(--ink); }
+.ab-field input:focus, .ab-field select:focus { outline: 2px solid var(--gold-light); outline-offset: 1px; }
+.ab-btn-primary { width: 100%; margin-top: 6px; padding: 11px; background: var(--green-900); color: #fff; border: none; font-size: 14px; font-weight: 600; }
+.ab-btn-primary:hover { background: var(--green-700); }
+.ab-btn-primary:disabled { opacity: .6; }
+.ab-login-note { text-align: center; font-size: 11px; color: #948c73; margin-top: 14px; }
+.ab-err { background: #fbeeeb; border: 1px solid var(--danger); color: var(--danger); font-size: 12.5px; padding: 8px 10px; margin-bottom: 12px; }
+.ab-center-msg { min-height: 400px; display: flex; align-items: center; justify-content: center; color: #7a7256; font-size: 14px; }
+
+.ab-shell { display: flex; min-height: 600px; }
+.ab-sidebar { width: 210px; flex-shrink: 0; background: var(--green-950); color: #eae3cc; display: flex; flex-direction: column; padding: 20px 0; }
+.ab-side-head { padding: 0 18px 18px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
+.ab-side-emblem { display: flex; align-items: center; gap: 10px; }
+.ab-side-emblem .mark { width: 36px; height: 36px; border-radius: 999px; border: 1.5px solid var(--gold);
+  display: flex; align-items: center; justify-content: center; font-family: 'Amiri', serif; color: var(--gold-light); font-weight: 700; flex-shrink: 0; }
+.ab-side-emblem .name { font-family: 'Amiri', serif; font-size: 15px; line-height: 1.3; color: #f4efe0; }
+.ab-side-emblem .name small { display: block; font-family: 'Cairo'; font-size: 10.5px; color: #a99f7f; margin-top: 2px; }
+.ab-nav { list-style: none; margin: 0; padding: 0 10px; flex: 1; }
+.ab-nav li { margin-bottom: 2px; }
+.ab-nav button { width: 100%; text-align: right; background: none; border: none; color: #cfc6a8; padding: 10px 12px; font-size: 13.5px;
+  display: flex; align-items: center; gap: 10px; border-right: 3px solid transparent; }
+.ab-nav button:hover { background: rgba(255,255,255,.05); }
+.ab-nav button.active { background: rgba(184,137,43,.14); color: #fff; border-right-color: var(--gold); }
+.ab-nav .ic { width: 16px; text-align: center; opacity: .85; }
+.ab-side-foot { padding: 14px 18px 0; border-top: 1px solid rgba(255,255,255,.1); font-size: 12px; color: #a99f7f; }
+.ab-side-foot button { background: none; border: none; color: #d9b25f; font-size: 12px; padding: 6px 0; }
+.ab-role-tag { display: inline-block; margin-top: 4px; font-size: 10.5px; padding: 1px 7px; border: 1px solid var(--gold); color: var(--gold-light); }
+
+.ab-main { flex: 1; min-width: 0; background: var(--paper); }
+.ab-topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 26px; border-bottom: 1px solid var(--line); background: #fff; }
+.ab-topbar h1 { font-family: 'Amiri', serif; font-size: 21px; margin: 0; color: var(--green-950); }
+.ab-topbar .who { font-size: 12.5px; color: #7a7256; }
+.ab-content { padding: 24px 26px 40px; }
+.ab-menu-toggle { display: none; }
+
+.ab-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 26px; }
+.ab-stat { background: #fff; border: 1px solid var(--line); border-top: 3px solid var(--gold); padding: 16px 16px 14px; }
+.ab-stat .n { font-family: 'Amiri', serif; font-size: 30px; color: var(--green-950); line-height: 1; }
+.ab-stat .l { font-size: 12.5px; color: #7a7256; margin-top: 6px; }
+
+.ab-panel { background: #fff; border: 1px solid var(--line); }
+.ab-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.ab-panel-head h2 { font-family: 'Amiri', serif; font-size: 17px; margin: 0; color: var(--green-950); }
+.ab-panel-body { padding: 18px; }
+
+.ab-btn { padding: 8px 16px; background: var(--green-900); color: #fff; border: none; font-size: 13px; font-weight: 600; }
+.ab-btn:hover { background: var(--green-700); }
+.ab-btn.ghost { background: none; color: var(--green-900); border: 1px solid var(--green-900); }
+.ab-btn.danger { background: none; color: var(--danger); border: 1px solid var(--danger); }
+.ab-btn.small { padding: 5px 10px; font-size: 12px; }
+.ab-btn:disabled { opacity: .5; }
+
+table.ab-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.ab-table th { text-align: right; padding: 9px 10px; background: var(--paper-2); color: #5b5540; font-weight: 600; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+table.ab-table td { padding: 9px 10px; border-bottom: 1px solid #efe9d6; }
+table.ab-table tr:last-child td { border-bottom: none; }
+.ab-empty { text-align: center; padding: 40px 20px; color: #948c73; font-size: 13.5px; }
+
+.ab-badge { display: inline-block; padding: 2px 9px; font-size: 11.5px; border: 1px solid; }
+.ab-badge.ok { color: #1f5c46; border-color: #1f5c46; background: #eef6f1; }
+.ab-badge.warn { color: #a3402f; border-color: #a3402f; background: #fbeeeb; }
+.ab-badge.mid { color: #8a6d1c; border-color: #b8892b; background: #fbf3e2; }
+
+.ab-modal-bg { position: fixed; inset: 0; background: rgba(14,43,34,.45); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.ab-modal { background: #fff; width: 100%; max-width: 420px; border-top: 3px solid var(--gold); max-height: 88vh; overflow-y: auto; }
+.ab-modal-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.ab-modal-head h3 { font-family: 'Amiri', serif; font-size: 17px; margin: 0; color: var(--green-950); }
+.ab-modal-head button { background: none; border: none; font-size: 18px; color: #948c73; }
+.ab-modal-body { padding: 18px 20px; }
+.ab-modal-foot { padding: 14px 20px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+
+.ab-toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--green-950); color: #f4efe0; padding: 10px 20px; font-size: 13px; z-index: 80; }
+
+.ab-attend-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #efe9d6; }
+.ab-attend-row:last-child { border-bottom: none; }
+.ab-seg { display: flex; border: 1px solid var(--line); overflow: hidden; }
+.ab-seg button { padding: 5px 12px; background: #fff; border: none; font-size: 12px; color: #6b6353; border-left: 1px solid var(--line); }
+.ab-seg button:last-child { border-left: none; }
+.ab-seg button.on-present { background: #1f5c46; color: #fff; }
+.ab-seg button.on-absent { background: #a3402f; color: #fff; }
+.ab-seg button.on-late { background: #b8892b; color: #fff; }
+.ab-seg button:disabled { opacity: .5; }
+
+@media (max-width: 760px) {
+  .ab-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .ab-sidebar { position: fixed; top: 0; bottom: 0; right: 0; z-index: 40; transform: translateX(100%); transition: transform .2s ease; width: 220px; }
+  .ab-sidebar.open { transform: translateX(0); }
+  .ab-menu-toggle { display: inline-flex; background: none; border: 1px solid var(--line); padding: 6px 10px; font-size: 13px; }
+  .ab-content { padding: 18px 14px 32px; }
+  .ab-topbar { padding: 12px 14px; }
+}
+</style>
+
+<div id="albirr-root">
+  <div id="ab-boot" class="ab-center-msg">جارٍ التحقق من الدخول...</div>
+  <div id="ab-login-view" style="display:none"></div>
+  <div id="ab-app-view" style="display:none"></div>
+</div>
+
+<script>
+(function(){
+  // ---- Firebase config (provided by school admin) ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyDoKD7R0dIxWf1sKptTQy3KKjfH5JuZMgM",
+    authDomain: "albirr-school.firebaseapp.com",
+    projectId: "albirr-school",
+    storageBucket: "albirr-school.firebasestorage.app",
+    messagingSenderId: "632691311118",
+    appId: "1:632691311118:web:0f9da8b1b1aebdcef6725f",
+  };
+  const app = firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  const root = document.getElementById('albirr-root');
+  const bootEl = document.getElementById('ab-boot');
+  const loginView = document.getElementById('ab-login-view');
+  const appView = document.getElementById('ab-app-view');
+
+  let profile = null; // {uid, name, role, email}
+  let currentPage = 'dashboard';
+  let unsubscribers = [];
+  let cache = { students: [], teachers: [], attendance: {}, grades: {} };
+
+  const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const todayISO = () => new Date().toISOString().slice(0,10);
+  const arDate = (iso) => new Date(iso+'T00:00:00').toLocaleDateString('ar-EG', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  function toast(msg){
+    const t = document.createElement('div');
+    t.className = 'ab-toast'; t.textContent = msg;
+    root.appendChild(t);
+    setTimeout(()=>t.remove(), 2400);
+  }
+
+  function friendlyAuthError(err){
+    const map = {
+      'auth/email-already-in-use': 'هذا البريد مسجّل مسبقًا',
+      'auth/invalid-email': 'صيغة البريد الإلكتروني غير صحيحة',
+      'auth/weak-password': 'كلمة المرور ضعيفة (6 أحرف على الأقل)',
+      'auth/user-not-found': 'لا يوجد حساب بهذا البريد',
+      'auth/wrong-password': 'كلمة المرور غير صحيحة',
+      'auth/invalid-credential': 'البريد أو كلمة المرور غير صحيحة',
+      'auth/too-many-requests': 'محاولات كثيرة، حاول لاحقًا',
+    };
+    return map[err.code] || 'حدث خطأ: ' + err.message;
+  }
+
+  // ---------------- AUTH STATE ----------------
+  auth.onAuthStateChanged(async (user) => {
+    detachAll();
+    if(!user){
+      profile = null;
+      bootEl.style.display='none'; appView.style.display='none';
+      loginView.style.display='block';
+      renderLogin();
+      return;
+    }
+    bootEl.style.display='flex'; bootEl.textContent='جارٍ تحميل بيانات حسابك...';
+    loginView.style.display='none'; appView.style.display='none';
+    try {
+      const doc = await db.collection('users').doc(user.uid).get();
+      if(!doc.exists){
+        bootEl.textContent = 'تعذر العثور على صلاحيات هذا الحساب. تواصل مع إدارة المدرسة.';
+        return;
+      }
+      profile = { uid: user.uid, email: user.email, ...doc.data() };
+      bootEl.style.display='none'; appView.style.display='block';
+      currentPage = 'dashboard';
+      renderApp();
+    } catch(e){
+      console.error(e);
+      bootEl.textContent = 'حدث خطأ أثناء تحميل الحساب.';
+    }
+  });
+
+  function detachAll(){ unsubscribers.forEach(u=>u()); unsubscribers = []; }
+
+  // ---------------- LOGIN / SIGNUP ----------------
+  function renderLogin(){
+    let mode = 'login';
+    loginView.innerHTML = `
+      <div class="ab-login">
+        <div class="ab-login-card">
+          <div class="ab-emblem">ب</div>
+          <h1 class="ab-login-title">معهد البر لتعليم القرآن والسنة النبوية</h1>
+          <p class="ab-login-sub">نظام إدارة المدرسة — دخول محمي</p>
+          <div class="ab-tabs">
+            <button data-m="login" class="active">تسجيل الدخول</button>
+            <button data-m="signup">إنشاء حساب جديد</button>
+          </div>
+          <div id="ab-auth-err"></div>
+          <div id="ab-auth-fields"></div>
+          <button class="ab-btn-primary" id="ab-auth-submit">دخول</button>
+          <p class="ab-login-note">حسابات "مدير النظام" تُفعَّل يدويًا من إدارة المدرسة لأسباب أمنية</p>
+        </div>
+      </div>`;
+    const fields = loginView.querySelector('#ab-auth-fields');
+    const submitBtn = loginView.querySelector('#ab-auth-submit');
+    const errBox = loginView.querySelector('#ab-auth-err');
+
+    function draw(){
+      errBox.innerHTML = '';
+      if(mode==='login'){
+        fields.innerHTML = `
+          <div class="ab-field"><label>البريد الإلكتروني</label><input id="f-email" type="email" autocomplete="username"></div>
+          <div class="ab-field"><label>كلمة المرور</label><input id="f-pass" type="password" autocomplete="current-password"></div>`;
+        submitBtn.textContent = 'دخول';
+      } else {
+        fields.innerHTML = `
+          <div class="ab-field"><label>الاسم الكامل</label><input id="f-name" type="text"></div>
+          <div class="ab-field"><label>البريد الإلكتروني</label><input id="f-email" type="email" autocomplete="username"></div>
+          <div class="ab-field"><label>كلمة المرور</label><input id="f-pass" type="password" autocomplete="new-password"></div>
+          <div class="ab-field"><label>الصفة</label>
+            <select id="f-role">
+              <option value="teacher">معلم</option>
+              <option value="parent">ولي أمر</option>
+            </select>
+          </div>`;
+        submitBtn.textContent = 'إنشاء الحساب';
+      }
+    }
+    draw();
+    loginView.querySelectorAll('.ab-tabs button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        mode = b.dataset.m;
+        loginView.querySelectorAll('.ab-tabs button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        draw();
+      });
+    });
+    submitBtn.addEventListener('click', async ()=>{
+      const email = fields.querySelector('#f-email').value.trim();
+      const pass = fields.querySelector('#f-pass').value;
+      if(!email || !pass){ errBox.innerHTML = `<div class="ab-err">أدخل البريد وكلمة المرور</div>`; return; }
+      submitBtn.disabled = true; submitBtn.textContent = 'جارٍ التحقق...';
+      try {
+        if(mode==='login'){
+          await auth.signInWithEmailAndPassword(email, pass);
+        } else {
+          const name = fields.querySelector('#f-name').value.trim();
+          const role = fields.querySelector('#f-role').value;
+          if(!name){ throw {code:'', message:'يرجى إدخال الاسم'}; }
+          const cred = await auth.createUserWithEmailAndPassword(email, pass);
+          await db.collection('users').doc(cred.user.uid).set({ name, role, email });
+        }
+      } catch(e){
+        errBox.innerHTML = `<div class="ab-err">${escapeHtml(friendlyAuthError(e))}</div>`;
+        submitBtn.disabled = false; draw(); submitBtn.textContent = mode==='login' ? 'دخول' : 'إنشاء الحساب';
+      }
+    });
+  }
+
+  // ---------------- APP SHELL ----------------
+  const ROLE_LABEL = { admin: 'مدير النظام', teacher: 'معلم', parent: 'ولي أمر' };
+  const isStaff = () => profile && (profile.role==='admin' || profile.role==='teacher');
+
+  const NAV = [
+    {key:'dashboard', label:'لوحة المتابعة', ic:'⌂'},
+    {key:'students', label:'الطلاب', ic:'☰'},
+    {key:'teachers', label:'المعلمون', ic:'✎'},
+    {key:'attendance', label:'الحضور والغياب', ic:'✓'},
+    {key:'grades', label:'الدرجات', ic:'★'},
+    {key:'fees', label:'الرسوم الدراسية', ic:'◆'},
+  ];
+
+  function renderApp(){
+    appView.innerHTML = `
+      <div class="ab-shell">
+        <aside class="ab-sidebar" id="ab-sidebar">
+          <div class="ab-side-head">
+            <div class="ab-side-emblem">
+              <div class="mark">ب</div>
+              <div class="name">معهد البر لتعليم القرآن والسنة النبوية<small>نظام الإدارة المدرسية</small></div>
+            </div>
+          </div>
+          <ul class="ab-nav" id="ab-nav"></ul>
+          <div class="ab-side-foot">
+            <strong style="color:#f0e9d4">${escapeHtml(profile.name)}</strong>
+            <span class="ab-role-tag">${ROLE_LABEL[profile.role]||profile.role}</span>
+            <br><button id="ab-logout">تسجيل الخروج</button>
+          </div>
+        </aside>
+        <div class="ab-main">
+          <div class="ab-topbar">
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="ab-menu-toggle" id="ab-menu-toggle">☰ القائمة</button>
+              <h1 id="ab-page-title"></h1>
+            </div>
+            <div class="who">${arDate(todayISO())}</div>
+          </div>
+          <div class="ab-content" id="ab-content"></div>
+        </div>
+      </div>`;
+
+    const navEl = appView.querySelector('#ab-nav');
+    navEl.innerHTML = NAV.map(n => `<li><button data-key="${n.key}" class="${n.key===currentPage?'active':''}"><span class="ic">${n.ic}</span>${n.label}</button></li>`).join('');
+    navEl.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        currentPage = b.dataset.key;
+        appView.querySelector('#ab-sidebar').classList.remove('open');
+        renderPage();
+        navEl.querySelectorAll('button').forEach(x=>x.classList.toggle('active', x.dataset.key===currentPage));
+        appView.querySelector('#ab-page-title').textContent = Object.fromEntries(NAV.map(n=>[n.key,n.label]))[currentPage];
+      });
+    });
+    appView.querySelector('#ab-logout').addEventListener('click', ()=> auth.signOut());
+    appView.querySelector('#ab-menu-toggle').addEventListener('click', ()=> appView.querySelector('#ab-sidebar').classList.toggle('open'));
+    appView.querySelector('#ab-page-title').textContent = Object.fromEntries(NAV.map(n=>[n.key,n.label]))[currentPage];
+
+    attachListeners();
+    renderPage();
+  }
+
+  function renderPage(){
+    const content = appView.querySelector('#ab-content');
+    if(!content) return;
+    if(currentPage==='dashboard') renderDashboard(content);
+    else if(currentPage==='students') renderStudents(content);
+    else if(currentPage==='teachers') renderTeachers(content);
+    else if(currentPage==='attendance') renderAttendance(content);
+    else if(currentPage==='grades') renderGrades(content);
+    else if(currentPage==='fees') renderFees(content);
+  }
+
+  // live Firestore listeners feeding the cache, re-rendering current page on change
+  function attachListeners(){
+    unsubscribers.push(db.collection('students').orderBy('name').onSnapshot(snap=>{
+      cache.students = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      renderPage();
+    }, err=>toast('تعذر تحميل بيانات الطلاب: '+err.message)));
+
+    unsubscribers.push(db.collection('teachers').orderBy('name').onSnapshot(snap=>{
+      cache.teachers = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      renderPage();
+    }, err=>toast('تعذر تحميل بيانات المعلمين: '+err.message)));
+
+    unsubscribers.push(db.collection('attendance').onSnapshot(snap=>{
+      const obj = {};
+      snap.docs.forEach(d=> obj[d.id] = d.data());
+      cache.attendance = obj;
+      renderPage();
+    }, err=>toast('تعذر تحميل الحضور: '+err.message)));
+
+    unsubscribers.push(db.collection('grades').onSnapshot(snap=>{
+      const obj = {};
+      snap.docs.forEach(d=> obj[d.id] = d.data().list || []);
+      cache.grades = obj;
+      renderPage();
+    }, err=>toast('تعذر تحميل الدرجات: '+err.message)));
+  }
+
+  // ---------------- DASHBOARD ----------------
+  function renderDashboard(el){
+    const totalStudents = cache.students.length;
+    const totalTeachers = cache.teachers.length;
+    const todayAtt = cache.attendance[todayISO()] || {};
+    const presentToday = Object.values(todayAtt).filter(v=>v==='present').length;
+    const totalDue = cache.students.reduce((s,st)=> s + Math.max(0,(st.feeTotal||0)-(st.feePaid||0)), 0);
+    el.innerHTML = `
+      <div class="ab-stat-grid">
+        <div class="ab-stat"><div class="n">${totalStudents}</div><div class="l">إجمالي الطلاب</div></div>
+        <div class="ab-stat"><div class="n">${totalTeachers}</div><div class="l">عدد المعلمين</div></div>
+        <div class="ab-stat"><div class="n">${presentToday}</div><div class="l">حضروا اليوم</div></div>
+        <div class="ab-stat"><div class="n">${totalDue.toLocaleString('ar-EG')}</div><div class="l">إجمالي الرسوم المستحقة</div></div>
+      </div>
+      <div class="ab-panel">
+        <div class="ab-panel-head"><h2>آخر الطلاب المسجلين</h2></div>
+        <div class="ab-panel-body">
+          ${totalStudents===0 ? `<div class="ab-empty">لا يوجد طلاب بعد.</div>` :
+          `<table class="ab-table"><thead><tr><th>الاسم</th><th>الصف</th><th>ولي الأمر</th></tr></thead><tbody>
+            ${cache.students.slice(-5).reverse().map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.grade||'')}</td><td>${escapeHtml(s.guardian||'—')}</td></tr>`).join('')}
+          </tbody></table>`}
+        </div>
+      </div>`;
+  }
+
+  // ---------------- STUDENTS ----------------
+  function renderStudents(el){
+    const canEdit = isStaff();
+    el.innerHTML = `
+      <div class="ab-panel">
+        <div class="ab-panel-head">
+          <h2>سجل الطلاب</h2>
+          ${canEdit ? `<button class="ab-btn" id="ab-add-student">+ إضافة طالب</button>` : ''}
+        </div>
+        <div class="ab-panel-body" id="ab-students-body"></div>
+      </div>`;
+    const body = el.querySelector('#ab-students-body');
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب مسجّلون بعد.</div>`; }
+    else {
+      body.innerHTML = `<table class="ab-table"><thead><tr>
+        <th>الاسم</th><th>الصف</th><th>ولي الأمر</th><th>الهاتف</th>${canEdit?'<th></th>':''}
+        </tr></thead><tbody>
+        ${cache.students.map(s=>`<tr>
+          <td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.grade||'')}</td>
+          <td>${escapeHtml(s.guardian||'—')}</td><td>${escapeHtml(s.phone||'—')}</td>
+          ${canEdit ? `<td style="white-space:nowrap">
+            <button class="ab-btn ghost small" data-edit="${s.id}">تعديل</button>
+            <button class="ab-btn danger small" data-del="${s.id}">حذف</button>
+          </td>` : ''}
+        </tr>`).join('')}
+        </tbody></table>`;
+      if(canEdit){
+        body.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>openStudentModal(cache.students.find(s=>s.id===b.dataset.edit))));
+        body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+          if(!confirm('هل تريد حذف هذا الطالب؟')) return;
+          try { await db.collection('students').doc(b.dataset.del).delete(); toast('تم الحذف'); }
+          catch(e){ toast('تعذر الحذف: '+e.message); }
+        }));
+      }
+    }
+    function openStudentModal(existing){
+      const modal = document.createElement('div');
+      modal.className = 'ab-modal-bg';
+      modal.innerHTML = `
+        <div class="ab-modal">
+          <div class="ab-modal-head"><h3>${existing?'تعديل بيانات طالب':'إضافة طالب جديد'}</h3><button data-close>✕</button></div>
+          <div class="ab-modal-body">
+            <div class="ab-field"><label>اسم الطالب</label><input id="f-name" value="${existing?escapeHtml(existing.name):''}"></div>
+            <div class="ab-field"><label>الصف الدراسي</label><input id="f-grade" value="${existing?escapeHtml(existing.grade||''):''}"></div>
+            <div class="ab-field"><label>اسم ولي الأمر</label><input id="f-guardian" value="${existing?escapeHtml(existing.guardian||''):''}"></div>
+            <div class="ab-field"><label>رقم الهاتف</label><input id="f-phone" value="${existing?escapeHtml(existing.phone||''):''}"></div>
+            <div class="ab-field"><label>الرسوم السنوية الكاملة</label><input id="f-feetotal" type="number" value="${existing?existing.feeTotal||0:0}"></div>
+          </div>
+          <div class="ab-modal-foot">
+            <button class="ab-btn" id="f-save">حفظ</button>
+            <button class="ab-btn ghost" data-close>إلغاء</button>
+          </div>
+        </div>`;
+      root.appendChild(modal);
+      modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>modal.remove()));
+      modal.querySelector('#f-save').addEventListener('click', async ()=>{
+        const name = modal.querySelector('#f-name').value.trim();
+        if(!name){ toast('اسم الطالب مطلوب'); return; }
+        const data = {
+          name, grade: modal.querySelector('#f-grade').value.trim(),
+          guardian: modal.querySelector('#f-guardian').value.trim(),
+          phone: modal.querySelector('#f-phone').value.trim(),
+          feeTotal: Number(modal.querySelector('#f-feetotal').value)||0,
+        };
+        try {
+          if(existing){ await db.collection('students').doc(existing.id).update(data); }
+          else { await db.collection('students').add({feePaid:0, ...data}); }
+          modal.remove(); toast('تم حفظ بيانات الطالب');
+        } catch(e){ toast('تعذر الحفظ: '+e.message); }
+      });
+    }
+    if(canEdit) el.querySelector('#ab-add-student').addEventListener('click', ()=>openStudentModal(null));
+  }
+
+  // ---------------- TEACHERS ----------------
+  function renderTeachers(el){
+    const canEdit = profile.role==='admin';
+    el.innerHTML = `
+      <div class="ab-panel">
+        <div class="ab-panel-head">
+          <h2>سجل المعلمين</h2>
+          ${canEdit ? `<button class="ab-btn" id="ab-add-teacher">+ إضافة معلم</button>` : ''}
+        </div>
+        <div class="ab-panel-body" id="ab-teachers-body"></div>
+      </div>`;
+    const body = el.querySelector('#ab-teachers-body');
+    if(cache.teachers.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد معلمون مسجّلون بعد.</div>`; }
+    else {
+      body.innerHTML = `<table class="ab-table"><thead><tr><th>الاسم</th><th>المادة</th><th>الهاتف</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
+        ${cache.teachers.map(t=>`<tr>
+          <td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.subject||'')}</td><td>${escapeHtml(t.phone||'—')}</td>
+          ${canEdit ? `<td style="white-space:nowrap">
+            <button class="ab-btn ghost small" data-edit="${t.id}">تعديل</button>
+            <button class="ab-btn danger small" data-del="${t.id}">حذف</button>
+          </td>` : ''}
+        </tr>`).join('')}
+        </tbody></table>`;
+      if(canEdit){
+        body.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>openTeacherModal(cache.teachers.find(t=>t.id===b.dataset.edit))));
+        body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
+          if(!confirm('هل تريد حذف هذا المعلم؟')) return;
+          try { await db.collection('teachers').doc(b.dataset.del).delete(); toast('تم الحذف'); }
+          catch(e){ toast('تعذر الحذف: '+e.message); }
+        }));
+      }
+    }
+    function openTeacherModal(existing){
+      const modal = document.createElement('div');
+      modal.className = 'ab-modal-bg';
+      modal.innerHTML = `
+        <div class="ab-modal">
+          <div class="ab-modal-head"><h3>${existing?'تعديل بيانات معلم':'إضافة معلم جديد'}</h3><button data-close>✕</button></div>
+          <div class="ab-modal-body">
+            <div class="ab-field"><label>اسم المعلم</label><input id="f-name" value="${existing?escapeHtml(existing.name):''}"></div>
+            <div class="ab-field"><label>المادة</label><input id="f-subject" value="${existing?escapeHtml(existing.subject||''):''}"></div>
+            <div class="ab-field"><label>رقم الهاتف</label><input id="f-phone" value="${existing?escapeHtml(existing.phone||''):''}"></div>
+          </div>
+          <div class="ab-modal-foot">
+            <button class="ab-btn" id="f-save">حفظ</button>
+            <button class="ab-btn ghost" data-close>إلغاء</button>
+          </div>
+        </div>`;
+      root.appendChild(modal);
+      modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>modal.remove()));
+      modal.querySelector('#f-save').addEventListener('click', async ()=>{
+        const name = modal.querySelector('#f-name').value.trim();
+        if(!name){ toast('اسم المعلم مطلوب'); return; }
+        const data = { name, subject: modal.querySelector('#f-subject').value.trim(), phone: modal.querySelector('#f-phone').value.trim() };
+        try {
+          if(existing){ await db.collection('teachers').doc(existing.id).update(data); }
+          else { await db.collection('teachers').add(data); }
+          modal.remove(); toast('تم حفظ بيانات المعلم');
+        } catch(e){ toast('تعذر الحفظ: '+e.message); }
+      });
+    }
+    if(canEdit) el.querySelector('#ab-add-teacher').addEventListener('click', ()=>openTeacherModal(null));
+  }
+
+  // ---------------- ATTENDANCE ----------------
+  function renderAttendance(el){
+    const canEdit = isStaff();
+    if(!el.dataset.date) el.dataset.date = todayISO();
+    const date = el.dataset.date;
+    el.innerHTML = `
+      <div class="ab-panel">
+        <div class="ab-panel-head">
+          <h2>تسجيل الحضور</h2>
+          <input type="date" id="ab-att-date" value="${date}" style="padding:7px 10px;border:1px solid var(--line)">
+        </div>
+        <div class="ab-panel-body" id="ab-att-body"></div>
+      </div>`;
+    const body = el.querySelector('#ab-att-body');
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا من صفحة «الطلاب».</div>`; }
+    else {
+      const dayRec = cache.attendance[date] || {};
+      body.innerHTML = cache.students.map(s=>{
+        const status = dayRec[s.id] || '';
+        return `<div class="ab-attend-row">
+          <div>${escapeHtml(s.name)} <span style="color:#948c73;font-size:12px">— ${escapeHtml(s.grade||'')}</span></div>
+          <div class="ab-seg" data-id="${s.id}">
+            <button data-v="present" ${!canEdit?'disabled':''} class="${status==='present'?'on-present':''}">حاضر</button>
+            <button data-v="late" ${!canEdit?'disabled':''} class="${status==='late'?'on-late':''}">متأخر</button>
+            <button data-v="absent" ${!canEdit?'disabled':''} class="${status==='absent'?'on-absent':''}">غائب</button>
+          </div>
+        </div>`;
+      }).join('');
+      if(canEdit){
+        body.querySelectorAll('.ab-seg').forEach(seg=>{
+          seg.querySelectorAll('button').forEach(btn=>{
+            btn.addEventListener('click', async ()=>{
+              try {
+                await db.collection('attendance').doc(date).set({ [seg.dataset.id]: btn.dataset.v }, { merge: true });
+              } catch(e){ toast('تعذر الحفظ: '+e.message); }
+            });
+          });
+        });
+      }
+    }
+    el.querySelector('#ab-att-date').addEventListener('change', (e)=>{ el.dataset.date = e.target.value; renderAttendance(el); });
+  }
+
+  // ---------------- GRADES ----------------
+  function renderGrades(el){
+    const canEdit = isStaff();
+    el.innerHTML = `
+      <div class="ab-panel">
+        <div class="ab-panel-head"><h2>رصد الدرجات</h2>${canEdit?'<button class="ab-btn" id="ab-add-grade">+ إضافة درجة</button>':''}</div>
+        <div class="ab-panel-body" id="ab-grades-body"></div>
+      </div>`;
+    const body = el.querySelector('#ab-grades-body');
+    const rows = [];
+    Object.entries(cache.grades).forEach(([sid, list])=>{
+      const student = cache.students.find(s=>s.id===sid);
+      if(!student) return;
+      list.forEach((g,idx)=> rows.push({sid, idx, student, ...g}));
+    });
+    rows.reverse();
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا.</div>`; }
+    else if(rows.length===0){ body.innerHTML = `<div class="ab-empty">لا توجد درجات مسجّلة بعد.</div>`; }
+    else {
+      body.innerHTML = `<table class="ab-table"><thead><tr><th>الطالب</th><th>المادة</th><th>الاختبار</th><th>الدرجة</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
+        ${rows.map(r=>`<tr>
+          <td>${escapeHtml(r.student.name)}</td><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.exam)}</td><td>${r.score} / ${r.max}</td>
+          ${canEdit ? `<td><button class="ab-btn danger small" data-del-sid="${r.sid}" data-del-idx="${r.idx}">حذف</button></td>` : ''}
+        </tr>`).join('')}
+        </tbody></table>`;
+      if(canEdit){
+        body.querySelectorAll('[data-del-sid]').forEach(b=>b.addEventListener('click', async ()=>{
+          const sid=b.dataset.delSid, idx=Number(b.dataset.delIdx);
+          const newList = (cache.grades[sid]||[]).slice(); newList.splice(idx,1);
+          try { await db.collection('grades').doc(sid).set({list:newList}); }
+          catch(e){ toast('تعذر الحذف: '+e.message); }
+        }));
+      }
+    }
+    if(canEdit) el.querySelector('#ab-add-grade').addEventListener('click', ()=>{
+      if(cache.students.length===0){ toast('أضف طلابًا أولًا'); return; }
+      const modal = document.createElement('div');
+      modal.className = 'ab-modal-bg';
+      modal.innerHTML = `
+        <div class="ab-modal">
+          <div class="ab-modal-head"><h3>إضافة درجة</h3><button data-close>✕</button></div>
+          <div class="ab-modal-body">
+            <div class="ab-field"><label>الطالب</label>
+              <select id="f-student">${cache.students.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select>
+            </div>
+            <div class="ab-field"><label>المادة</label><input id="f-subject"></div>
+            <div class="ab-field"><label>اسم الاختبار</label><input id="f-exam"></div>
+            <div class="ab-field"><label>الدرجة / من</label>
+              <div style="display:flex;gap:8px"><input id="f-score" type="number"><input id="f-max" type="number" value="100"></div>
+            </div>
+          </div>
+          <div class="ab-modal-foot"><button class="ab-btn" id="f-save">حفظ</button><button class="ab-btn ghost" data-close>إلغاء</button></div>
+        </div>`;
+      root.appendChild(modal);
+      modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>modal.remove()));
+      modal.querySelector('#f-save').addEventListener('click', async ()=>{
+        const sid = modal.querySelector('#f-student').value;
+        const subject = modal.querySelector('#f-subject').value.trim();
+        const exam = modal.querySelector('#f-exam').value.trim();
+        const score = Number(modal.querySelector('#f-score').value)||0;
+        const max = Number(modal.querySelector('#f-max').value)||100;
+        if(!subject || !exam){ toast('يرجى إدخال المادة واسم الاختبار'); return; }
+        const newList = (cache.grades[sid]||[]).concat([{subject, exam, score, max}]);
+        try { await db.collection('grades').doc(sid).set({list:newList}); modal.remove(); toast('تم تسجيل الدرجة'); }
+        catch(e){ toast('تعذر الحفظ: '+e.message); }
+      });
+    });
+  }
+
+  // ---------------- FEES ----------------
+  function renderFees(el){
+    const canEdit = isStaff();
+    el.innerHTML = `<div class="ab-panel"><div class="ab-panel-head"><h2>متابعة الرسوم الدراسية</h2></div><div class="ab-panel-body" id="ab-fees-body"></div></div>`;
+    const body = el.querySelector('#ab-fees-body');
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا.</div>`; return; }
+    body.innerHTML = `<table class="ab-table"><thead><tr><th>الطالب</th><th>الرسوم الكاملة</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
+      ${cache.students.map(s=>{
+        const total = s.feeTotal||0, paid = s.feePaid||0, due = Math.max(0,total-paid);
+        const badge = due===0 && total>0 ? `<span class="ab-badge ok">مسدّد بالكامل</span>` :
+                      paid>0 ? `<span class="ab-badge mid">مسدّد جزئيًا</span>` : `<span class="ab-badge warn">غير مسدّد</span>`;
+        return `<tr>
+          <td>${escapeHtml(s.name)}</td><td>${total.toLocaleString('ar-EG')}</td><td>${paid.toLocaleString('ar-EG')}</td><td>${due.toLocaleString('ar-EG')}</td><td>${badge}</td>
+          ${canEdit ? `<td><button class="ab-btn small" data-pay="${s.id}">تسجيل دفعة</button></td>` : ''}
+        </tr>`;
+      }).join('')}
+      </tbody></table>`;
+    if(canEdit){
+      body.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click', ()=>{
+        const student = cache.students.find(s=>s.id===b.dataset.pay);
+        const amountStr = prompt(`أدخل قيمة الدفعة الجديدة لـ ${student.name}:`, '');
+        if(amountStr===null) return;
+        const amount = Number(amountStr);
+        if(!amount || amount<=0){ toast('قيمة غير صحيحة'); return; }
+        db.collection('students').doc(student.id).update({ feePaid: (student.feePaid||0) + amount })
+          .then(()=>toast('تم تسجيل الدفعة'))
+          .catch(e=>toast('تعذر الحفظ: '+e.message));
+      }));
+    }
+  }
+})();
+</script>
