@@ -13,14 +13,14 @@ html, body {
   --green-950: #0e2b22; --green-900: #123a2d; --green-700: #1f5c46; --green-600: #2d7a5c;
   --gold: #b8892b; --gold-light: #d9b25f; --line: #d8cba9; --danger: #a3402f;
   font-family: 'Cairo', sans-serif; direction: rtl; color: var(--ink); background: var(--paper);
-  min-height: 100vh; position: relative; font-size: 15px; line-height: 1.6;
+  min-height: 100vh; min-height: 100dvh; position: relative; font-size: 15px; line-height: 1.6;
 }
 #albirr-root * { box-sizing: border-box; }
 #albirr-root button { font-family: inherit; cursor: pointer; }
 #albirr-root input, #albirr-root select { font-family: inherit; }
 
 .ab-login {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at 15% 20%, rgba(184,137,43,.10), transparent 40%),
     radial-gradient(circle at 85% 80%, rgba(31,92,70,.12), transparent 45%), var(--paper);
   padding: 32px 16px;
@@ -44,7 +44,7 @@ html, body {
 .ab-btn-primary:disabled { opacity: .6; }
 .ab-login-note { text-align: center; font-size: 11px; color: #948c73; margin-top: 14px; }
 .ab-err { background: #fbeeeb; border: 1px solid var(--danger); color: var(--danger); font-size: 12.5px; padding: 8px 10px; margin-bottom: 12px; }
-.ab-center-msg { min-height: 100vh; display: flex; align-items: center; justify-content: center; color: #7a7256; font-size: 14px; }
+.ab-center-msg { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; color: #7a7256; font-size: 14px; }
 
 .ab-shell { display: flex; min-height: 600px; }
 .ab-sidebar { width: 210px; flex-shrink: 0; background: var(--green-950); color: #eae3cc; display: flex; flex-direction: column; padding: 20px 0; }
