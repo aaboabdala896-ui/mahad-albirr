@@ -146,7 +146,6 @@ table.ab-table tr:last-child td { border-bottom: none; }
 
 <script>
 (function(){
-  // ---- Firebase config (provided by school admin) ----
   const firebaseConfig = {
     apiKey: "AIzaSyDoKD7R0dIxWf1sKptTQy3KKjfH5JuZMgM",
     authDomain: "albirr-school.firebaseapp.com",
@@ -155,7 +154,7 @@ table.ab-table tr:last-child td { border-bottom: none; }
     messagingSenderId: "632691311118",
     appId: "1:632691311118:web:0f9da8b1b1aebdcef6725f",
   };
-  const app = firebase.initializeApp(firebaseConfig);
+  firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
 
@@ -164,10 +163,10 @@ table.ab-table tr:last-child td { border-bottom: none; }
   const loginView = document.getElementById('ab-login-view');
   const appView = document.getElementById('ab-app-view');
 
-  let profile = null; // {uid, name, role, email}
+  let profile = null;
   let currentPage = 'dashboard';
   let unsubscribers = [];
-  let cache = { students: [], teachers: [], attendance: {}, grades: {} };
+  let cache = { students: [], teachers: [], attendance: [], grades: {}, progress: {} };
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const todayISO = () => new Date().toISOString().slice(0,10);
@@ -193,7 +192,6 @@ table.ab-table tr:last-child td { border-bottom: none; }
     return map[err.code] || 'حدث خطأ: ' + err.message;
   }
 
-  // ---------------- AUTH STATE ----------------
   auth.onAuthStateChanged(async (user) => {
     detachAll();
     if(!user){
@@ -231,7 +229,7 @@ table.ab-table tr:last-child td { border-bottom: none; }
         <div class="ab-login-card">
           <div class="ab-emblem">ب</div>
           <h1 class="ab-login-title">معهد البر لتعليم القرآن والسنة النبوية</h1>
-          <p class="ab-login-sub">نظام إدارة المدرسة — دخول محمي</p>
+          <p class="ab-login-sub">نظام إدارة المعهد — دخول محمي</p>
           <div class="ab-tabs">
             <button data-m="login" class="active">تسجيل الدخول</button>
             <button data-m="signup">إنشاء حساب جديد</button>
@@ -239,7 +237,7 @@ table.ab-table tr:last-child td { border-bottom: none; }
           <div id="ab-auth-err"></div>
           <div id="ab-auth-fields"></div>
           <button class="ab-btn-primary" id="ab-auth-submit">دخول</button>
-          <p class="ab-login-note">حسابات "مدير النظام" تُفعَّل يدويًا من إدارة المدرسة لأسباب أمنية</p>
+          <p class="ab-login-note">حسابات "مدير النظام" تُفعَّل يدويًا من إدارة المعهد لأسباب أمنية</p>
         </div>
       </div>`;
     const fields = loginView.querySelector('#ab-auth-fields');
@@ -300,18 +298,25 @@ table.ab-table tr:last-child td { border-bottom: none; }
 
   // ---------------- APP SHELL ----------------
   const ROLE_LABEL = { admin: 'مدير النظام', teacher: 'معلم', parent: 'ولي أمر' };
-  const isStaff = () => profile && (profile.role==='admin' || profile.role==='teacher');
+  const isAdmin = () => profile && profile.role==='admin';
+  const isTeacher = () => profile && profile.role==='teacher';
+  const isParent = () => profile && profile.role==='parent';
+  const isStaff = () => isAdmin() || isTeacher();
 
-  const NAV = [
-    {key:'dashboard', label:'لوحة المتابعة', ic:'⌂'},
-    {key:'students', label:'الطلاب', ic:'☰'},
-    {key:'teachers', label:'المعلمون', ic:'✎'},
-    {key:'attendance', label:'الحضور والغياب', ic:'✓'},
-    {key:'grades', label:'الدرجات', ic:'★'},
-    {key:'fees', label:'الرسوم الدراسية', ic:'◆'},
+  const ALL_NAV = [
+    {key:'dashboard', label:'لوحة المتابعة', ic:'⌂', roles:['admin','teacher','parent']},
+    {key:'students', label:'الطلاب', ic:'☰', roles:['admin','teacher','parent']},
+    {key:'teachers', label:'المعلمون', ic:'✎', roles:['admin']},
+    {key:'attendance', label:'الحضور والغياب', ic:'✓', roles:['admin','teacher','parent']},
+    {key:'grades', label:'الدرجات', ic:'★', roles:['admin','teacher','parent']},
+    {key:'progress', label:'الحفظ والسلوك', ic:'◈', roles:['admin','teacher','parent']},
+    {key:'fees', label:'الرسوم الدراسية', ic:'◆', roles:['admin','parent']},
   ];
 
   function renderApp(){
+    const NAV = ALL_NAV.filter(n => n.roles.includes(profile.role));
+    if(!NAV.find(n=>n.key===currentPage)) currentPage = 'dashboard';
+
     appView.innerHTML = `
       <div class="ab-shell">
         <aside class="ab-sidebar" id="ab-sidebar">
@@ -364,59 +369,72 @@ table.ab-table tr:last-child td { border-bottom: none; }
     if(!content) return;
     if(currentPage==='dashboard') renderDashboard(content);
     else if(currentPage==='students') renderStudents(content);
-    else if(currentPage==='teachers') renderTeachers(content);
+    else if(currentPage==='teachers') renderTeachersDirectory(content);
     else if(currentPage==='attendance') renderAttendance(content);
     else if(currentPage==='grades') renderGrades(content);
+    else if(currentPage==='progress') renderProgress(content);
     else if(currentPage==='fees') renderFees(content);
   }
 
-  // live Firestore listeners feeding the cache, re-rendering current page on change
   function attachListeners(){
     unsubscribers.push(db.collection('students').orderBy('name').onSnapshot(snap=>{
       cache.students = snap.docs.map(d=>({id:d.id, ...d.data()}));
       renderPage();
     }, err=>toast('تعذر تحميل بيانات الطلاب: '+err.message)));
 
-    unsubscribers.push(db.collection('teachers').orderBy('name').onSnapshot(snap=>{
-      cache.teachers = snap.docs.map(d=>({id:d.id, ...d.data()}));
-      renderPage();
-    }, err=>toast('تعذر تحميل بيانات المعلمين: '+err.message)));
+    if(isAdmin()){
+      unsubscribers.push(db.collection('users').where('role','==','teacher').onSnapshot(snap=>{
+        cache.teachers = snap.docs.map(d=>({uid:d.id, ...d.data()}));
+        renderPage();
+      }, err=>toast('تعذر تحميل بيانات المعلمين: '+err.message)));
+      unsubscribers.push(db.collection('users').where('role','==','parent').onSnapshot(snap=>{
+        cache.parents = snap.docs.map(d=>({uid:d.id, ...d.data()}));
+        renderPage();
+      }, err=>{}));
+    }
 
     unsubscribers.push(db.collection('attendance').onSnapshot(snap=>{
-      const obj = {};
-      snap.docs.forEach(d=> obj[d.id] = d.data());
-      cache.attendance = obj;
+      cache.attendance = snap.docs.map(d=>({id:d.id, ...d.data()}));
       renderPage();
     }, err=>toast('تعذر تحميل الحضور: '+err.message)));
 
     unsubscribers.push(db.collection('grades').onSnapshot(snap=>{
       const obj = {};
-      snap.docs.forEach(d=> obj[d.id] = d.data().list || []);
+      snap.docs.forEach(d=> obj[d.id] = d.data());
       cache.grades = obj;
       renderPage();
     }, err=>toast('تعذر تحميل الدرجات: '+err.message)));
+
+    unsubscribers.push(db.collection('progress').onSnapshot(snap=>{
+      const obj = {};
+      snap.docs.forEach(d=> obj[d.id] = d.data());
+      cache.progress = obj;
+      renderPage();
+    }, err=>toast('تعذر تحميل سجل الحفظ والسلوك: '+err.message)));
   }
+
+  function studentName(sid){ const s = cache.students.find(x=>x.id===sid); return s ? s.name : '—'; }
 
   // ---------------- DASHBOARD ----------------
   function renderDashboard(el){
     const totalStudents = cache.students.length;
-    const totalTeachers = cache.teachers.length;
-    const todayAtt = cache.attendance[todayISO()] || {};
-    const presentToday = Object.values(todayAtt).filter(v=>v==='present').length;
+    const totalTeachers = isAdmin() ? (cache.teachers||[]).length : '—';
+    const today = todayISO();
+    const presentToday = cache.attendance.filter(a=>a.date===today && a.status==='present').length;
     const totalDue = cache.students.reduce((s,st)=> s + Math.max(0,(st.feeTotal||0)-(st.feePaid||0)), 0);
     el.innerHTML = `
       <div class="ab-stat-grid">
-        <div class="ab-stat"><div class="n">${totalStudents}</div><div class="l">إجمالي الطلاب</div></div>
-        <div class="ab-stat"><div class="n">${totalTeachers}</div><div class="l">عدد المعلمين</div></div>
+        <div class="ab-stat"><div class="n">${totalStudents}</div><div class="l">${isParent()?'أبناؤك المسجّلون':'إجمالي الطلاب'}</div></div>
+        ${isAdmin() ? `<div class="ab-stat"><div class="n">${totalTeachers}</div><div class="l">عدد المعلمين</div></div>` : ''}
         <div class="ab-stat"><div class="n">${presentToday}</div><div class="l">حضروا اليوم</div></div>
-        <div class="ab-stat"><div class="n">${totalDue.toLocaleString('ar-EG')}</div><div class="l">إجمالي الرسوم المستحقة</div></div>
+        ${!isTeacher() ? `<div class="ab-stat"><div class="n">${totalDue.toLocaleString('ar-EG')}</div><div class="l">إجمالي الرسوم المستحقة</div></div>` : ''}
       </div>
       <div class="ab-panel">
-        <div class="ab-panel-head"><h2>آخر الطلاب المسجلين</h2></div>
+        <div class="ab-panel-head"><h2>${isParent() ? 'أبناؤك' : 'آخر الطلاب المسجلين'}</h2></div>
         <div class="ab-panel-body">
           ${totalStudents===0 ? `<div class="ab-empty">لا يوجد طلاب بعد.</div>` :
-          `<table class="ab-table"><thead><tr><th>الاسم</th><th>الصف</th><th>ولي الأمر</th></tr></thead><tbody>
-            ${cache.students.slice(-5).reverse().map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.grade||'')}</td><td>${escapeHtml(s.guardian||'—')}</td></tr>`).join('')}
+          `<table class="ab-table"><thead><tr><th>الاسم</th><th>الصف</th><th>${isParent()?'المعلم':'ولي الأمر'}</th></tr></thead><tbody>
+            ${cache.students.slice(-5).reverse().map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.grade||'')}</td><td>${escapeHtml(isParent() ? (s.teacherName||'—') : (s.guardian||'—'))}</td></tr>`).join('')}
           </tbody></table>`}
         </div>
       </div>`;
@@ -424,27 +442,30 @@ table.ab-table tr:last-child td { border-bottom: none; }
 
   // ---------------- STUDENTS ----------------
   function renderStudents(el){
+    const canAdd = isAdmin();
     const canEdit = isStaff();
     el.innerHTML = `
       <div class="ab-panel">
         <div class="ab-panel-head">
-          <h2>سجل الطلاب</h2>
-          ${canEdit ? `<button class="ab-btn" id="ab-add-student">+ إضافة طالب</button>` : ''}
+          <h2>${isParent()?'أبناؤك':'سجل الطلاب'}</h2>
+          ${canAdd ? `<button class="ab-btn" id="ab-add-student">+ إضافة طالب</button>` : ''}
         </div>
         <div class="ab-panel-body" id="ab-students-body"></div>
       </div>`;
     const body = el.querySelector('#ab-students-body');
-    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب مسجّلون بعد.</div>`; }
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">${isParent()?'لا يوجد أبناء مرتبطون بحسابك بعد. تواصل مع إدارة المعهد لربط الحساب.':'لا يوجد طلاب مسجّلون بعد.'}</div>`; }
     else {
       body.innerHTML = `<table class="ab-table"><thead><tr>
-        <th>الاسم</th><th>الصف</th><th>ولي الأمر</th><th>الهاتف</th>${canEdit?'<th></th>':''}
+        <th>الاسم</th><th>الصف</th><th>المعلم المسؤول</th>${isAdmin()?'<th>ولي الأمر</th>':''}<th>الهاتف</th>${canEdit?'<th></th>':''}
         </tr></thead><tbody>
         ${cache.students.map(s=>`<tr>
           <td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.grade||'')}</td>
-          <td>${escapeHtml(s.guardian||'—')}</td><td>${escapeHtml(s.phone||'—')}</td>
+          <td>${escapeHtml(s.teacherName||'غير محدد')}</td>
+          ${isAdmin()?`<td>${escapeHtml(s.guardian||'—')}</td>`:''}
+          <td>${escapeHtml(s.phone||'—')}</td>
           ${canEdit ? `<td style="white-space:nowrap">
             <button class="ab-btn ghost small" data-edit="${s.id}">تعديل</button>
-            <button class="ab-btn danger small" data-del="${s.id}">حذف</button>
+            ${isAdmin()?`<button class="ab-btn danger small" data-del="${s.id}">حذف</button>`:''}
           </td>` : ''}
         </tr>`).join('')}
         </tbody></table>`;
@@ -458,6 +479,8 @@ table.ab-table tr:last-child td { border-bottom: none; }
       }
     }
     function openStudentModal(existing){
+      const teacherOptions = `<option value="">— غير محدد —</option>` + (cache.teachers||[]).map(t=>`<option value="${t.uid}" ${existing&&existing.teacherUid===t.uid?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+      const parentOptions = `<option value="">— غير محدد —</option>` + (cache.parents||[]).map(p=>`<option value="${p.uid}" ${existing&&existing.parentUid===p.uid?'selected':''}>${escapeHtml(p.name)} (${escapeHtml(p.email)})</option>`).join('');
       const modal = document.createElement('div');
       modal.className = 'ab-modal-bg';
       modal.innerHTML = `
@@ -466,9 +489,13 @@ table.ab-table tr:last-child td { border-bottom: none; }
           <div class="ab-modal-body">
             <div class="ab-field"><label>اسم الطالب</label><input id="f-name" value="${existing?escapeHtml(existing.name):''}"></div>
             <div class="ab-field"><label>الصف الدراسي</label><input id="f-grade" value="${existing?escapeHtml(existing.grade||''):''}"></div>
-            <div class="ab-field"><label>اسم ولي الأمر</label><input id="f-guardian" value="${existing?escapeHtml(existing.guardian||''):''}"></div>
+            ${isAdmin() ? `
+            <div class="ab-field"><label>المعلم المسؤول</label><select id="f-teacher">${teacherOptions}</select></div>
+            <div class="ab-field"><label>ولي الأمر (حساب مسجّل)</label><select id="f-parent">${parentOptions}</select></div>
+            ` : ''}
+            <div class="ab-field"><label>اسم ولي الأمر (نصي)</label><input id="f-guardian" value="${existing?escapeHtml(existing.guardian||''):''}"></div>
             <div class="ab-field"><label>رقم الهاتف</label><input id="f-phone" value="${existing?escapeHtml(existing.phone||''):''}"></div>
-            <div class="ab-field"><label>الرسوم السنوية الكاملة</label><input id="f-feetotal" type="number" value="${existing?existing.feeTotal||0:0}"></div>
+            ${isAdmin() ? `<div class="ab-field"><label>الرسوم السنوية الكاملة</label><input id="f-feetotal" type="number" value="${existing?existing.feeTotal||0:0}"></div>` : ''}
           </div>
           <div class="ab-modal-foot">
             <button class="ab-btn" id="f-save">حفظ</button>
@@ -484,80 +511,43 @@ table.ab-table tr:last-child td { border-bottom: none; }
           name, grade: modal.querySelector('#f-grade').value.trim(),
           guardian: modal.querySelector('#f-guardian').value.trim(),
           phone: modal.querySelector('#f-phone').value.trim(),
-          feeTotal: Number(modal.querySelector('#f-feetotal').value)||0,
         };
+        if(isAdmin()){
+          const teacherUid = modal.querySelector('#f-teacher').value;
+          const parentUid = modal.querySelector('#f-parent').value;
+          const teacherObj = (cache.teachers||[]).find(t=>t.uid===teacherUid);
+          const parentObj = (cache.parents||[]).find(p=>p.uid===parentUid);
+          data.teacherUid = teacherUid || null;
+          data.teacherName = teacherObj ? teacherObj.name : null;
+          data.parentUid = parentUid || null;
+          data.parentName = parentObj ? parentObj.name : null;
+          data.feeTotal = Number(modal.querySelector('#f-feetotal').value)||0;
+        }
         try {
           if(existing){ await db.collection('students').doc(existing.id).update(data); }
-          else { await db.collection('students').add({feePaid:0, ...data}); }
+          else { await db.collection('students').add({feePaid:0, teacherUid:null, parentUid:null, ...data}); }
           modal.remove(); toast('تم حفظ بيانات الطالب');
         } catch(e){ toast('تعذر الحفظ: '+e.message); }
       });
     }
-    if(canEdit) el.querySelector('#ab-add-student').addEventListener('click', ()=>openStudentModal(null));
+    if(canAdd) el.querySelector('#ab-add-student').addEventListener('click', ()=>openStudentModal(null));
   }
 
-  // ---------------- TEACHERS ----------------
-  function renderTeachers(el){
-    const canEdit = profile.role==='admin';
+  // ---------------- TEACHERS DIRECTORY (admin only) ----------------
+  function renderTeachersDirectory(el){
     el.innerHTML = `
       <div class="ab-panel">
-        <div class="ab-panel-head">
-          <h2>سجل المعلمين</h2>
-          ${canEdit ? `<button class="ab-btn" id="ab-add-teacher">+ إضافة معلم</button>` : ''}
-        </div>
+        <div class="ab-panel-head"><h2>المعلمون المسجّلون</h2></div>
         <div class="ab-panel-body" id="ab-teachers-body"></div>
-      </div>`;
+      </div>
+      <p style="color:#948c73;font-size:12.5px;margin-top:10px">يظهر هنا كل من سجّل حسابًا واختار صفة "معلم". لإسناد طلاب لمعلم، عدّل الطالب من صفحة «الطلاب».</p>`;
     const body = el.querySelector('#ab-teachers-body');
-    if(cache.teachers.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد معلمون مسجّلون بعد.</div>`; }
-    else {
-      body.innerHTML = `<table class="ab-table"><thead><tr><th>الاسم</th><th>المادة</th><th>الهاتف</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
-        ${cache.teachers.map(t=>`<tr>
-          <td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.subject||'')}</td><td>${escapeHtml(t.phone||'—')}</td>
-          ${canEdit ? `<td style="white-space:nowrap">
-            <button class="ab-btn ghost small" data-edit="${t.id}">تعديل</button>
-            <button class="ab-btn danger small" data-del="${t.id}">حذف</button>
-          </td>` : ''}
-        </tr>`).join('')}
-        </tbody></table>`;
-      if(canEdit){
-        body.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click', ()=>openTeacherModal(cache.teachers.find(t=>t.id===b.dataset.edit))));
-        body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', async ()=>{
-          if(!confirm('هل تريد حذف هذا المعلم؟')) return;
-          try { await db.collection('teachers').doc(b.dataset.del).delete(); toast('تم الحذف'); }
-          catch(e){ toast('تعذر الحذف: '+e.message); }
-        }));
-      }
-    }
-    function openTeacherModal(existing){
-      const modal = document.createElement('div');
-      modal.className = 'ab-modal-bg';
-      modal.innerHTML = `
-        <div class="ab-modal">
-          <div class="ab-modal-head"><h3>${existing?'تعديل بيانات معلم':'إضافة معلم جديد'}</h3><button data-close>✕</button></div>
-          <div class="ab-modal-body">
-            <div class="ab-field"><label>اسم المعلم</label><input id="f-name" value="${existing?escapeHtml(existing.name):''}"></div>
-            <div class="ab-field"><label>المادة</label><input id="f-subject" value="${existing?escapeHtml(existing.subject||''):''}"></div>
-            <div class="ab-field"><label>رقم الهاتف</label><input id="f-phone" value="${existing?escapeHtml(existing.phone||''):''}"></div>
-          </div>
-          <div class="ab-modal-foot">
-            <button class="ab-btn" id="f-save">حفظ</button>
-            <button class="ab-btn ghost" data-close>إلغاء</button>
-          </div>
-        </div>`;
-      root.appendChild(modal);
-      modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>modal.remove()));
-      modal.querySelector('#f-save').addEventListener('click', async ()=>{
-        const name = modal.querySelector('#f-name').value.trim();
-        if(!name){ toast('اسم المعلم مطلوب'); return; }
-        const data = { name, subject: modal.querySelector('#f-subject').value.trim(), phone: modal.querySelector('#f-phone').value.trim() };
-        try {
-          if(existing){ await db.collection('teachers').doc(existing.id).update(data); }
-          else { await db.collection('teachers').add(data); }
-          modal.remove(); toast('تم حفظ بيانات المعلم');
-        } catch(e){ toast('تعذر الحفظ: '+e.message); }
-      });
-    }
-    if(canEdit) el.querySelector('#ab-add-teacher').addEventListener('click', ()=>openTeacherModal(null));
+    const list = cache.teachers||[];
+    if(list.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد معلمون مسجّلون بعد.</div>`; return; }
+    const studentCount = (uid) => cache.students.filter(s=>s.teacherUid===uid).length;
+    body.innerHTML = `<table class="ab-table"><thead><tr><th>الاسم</th><th>البريد</th><th>عدد الطلاب المسندين</th></tr></thead><tbody>
+      ${list.map(t=>`<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.email)}</td><td>${studentCount(t.uid)}</td></tr>`).join('')}
+      </tbody></table>`;
   }
 
   // ---------------- ATTENDANCE ----------------
@@ -568,17 +558,17 @@ table.ab-table tr:last-child td { border-bottom: none; }
     el.innerHTML = `
       <div class="ab-panel">
         <div class="ab-panel-head">
-          <h2>تسجيل الحضور</h2>
+          <h2>${isParent()?'حضور أبنائك':'تسجيل الحضور'}</h2>
           <input type="date" id="ab-att-date" value="${date}" style="padding:7px 10px;border:1px solid var(--line)">
         </div>
         <div class="ab-panel-body" id="ab-att-body"></div>
       </div>`;
     const body = el.querySelector('#ab-att-body');
-    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا من صفحة «الطلاب».</div>`; }
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب لعرضهم.</div>`; }
     else {
-      const dayRec = cache.attendance[date] || {};
+      const dayRecs = Object.fromEntries(cache.attendance.filter(a=>a.date===date).map(a=>[a.studentId, a.status]));
       body.innerHTML = cache.students.map(s=>{
-        const status = dayRec[s.id] || '';
+        const status = dayRecs[s.id] || '';
         return `<div class="ab-attend-row">
           <div>${escapeHtml(s.name)} <span style="color:#948c73;font-size:12px">— ${escapeHtml(s.grade||'')}</span></div>
           <div class="ab-seg" data-id="${s.id}">
@@ -592,8 +582,14 @@ table.ab-table tr:last-child td { border-bottom: none; }
         body.querySelectorAll('.ab-seg').forEach(seg=>{
           seg.querySelectorAll('button').forEach(btn=>{
             btn.addEventListener('click', async ()=>{
+              const sid = seg.dataset.id;
+              const student = cache.students.find(s=>s.id===sid);
               try {
-                await db.collection('attendance').doc(date).set({ [seg.dataset.id]: btn.dataset.v }, { merge: true });
+                await db.collection('attendance').doc(`${date}_${sid}`).set({
+                  date, studentId: sid, status: btn.dataset.v,
+                  teacherUid: student.teacherUid || null,
+                  parentUid: student.parentUid || null,
+                });
               } catch(e){ toast('تعذر الحفظ: '+e.message); }
             });
           });
@@ -608,18 +604,18 @@ table.ab-table tr:last-child td { border-bottom: none; }
     const canEdit = isStaff();
     el.innerHTML = `
       <div class="ab-panel">
-        <div class="ab-panel-head"><h2>رصد الدرجات</h2>${canEdit?'<button class="ab-btn" id="ab-add-grade">+ إضافة درجة</button>':''}</div>
+        <div class="ab-panel-head"><h2>${isParent()?'درجات أبنائك':'رصد الدرجات'}</h2>${canEdit?'<button class="ab-btn" id="ab-add-grade">+ إضافة درجة</button>':''}</div>
         <div class="ab-panel-body" id="ab-grades-body"></div>
       </div>`;
     const body = el.querySelector('#ab-grades-body');
     const rows = [];
-    Object.entries(cache.grades).forEach(([sid, list])=>{
+    Object.entries(cache.grades).forEach(([sid, docData])=>{
       const student = cache.students.find(s=>s.id===sid);
       if(!student) return;
-      list.forEach((g,idx)=> rows.push({sid, idx, student, ...g}));
+      (docData.list||[]).forEach((g,idx)=> rows.push({sid, idx, student, ...g}));
     });
     rows.reverse();
-    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا.</div>`; }
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب لعرضهم.</div>`; }
     else if(rows.length===0){ body.innerHTML = `<div class="ab-empty">لا توجد درجات مسجّلة بعد.</div>`; }
     else {
       body.innerHTML = `<table class="ab-table"><thead><tr><th>الطالب</th><th>المادة</th><th>الاختبار</th><th>الدرجة</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
@@ -631,14 +627,15 @@ table.ab-table tr:last-child td { border-bottom: none; }
       if(canEdit){
         body.querySelectorAll('[data-del-sid]').forEach(b=>b.addEventListener('click', async ()=>{
           const sid=b.dataset.delSid, idx=Number(b.dataset.delIdx);
-          const newList = (cache.grades[sid]||[]).slice(); newList.splice(idx,1);
-          try { await db.collection('grades').doc(sid).set({list:newList}); }
+          const student = cache.students.find(s=>s.id===sid);
+          const newList = (cache.grades[sid].list||[]).slice(); newList.splice(idx,1);
+          try { await db.collection('grades').doc(sid).set({list:newList, teacherUid: student.teacherUid||null, parentUid: student.parentUid||null}, {merge:true}); }
           catch(e){ toast('تعذر الحذف: '+e.message); }
         }));
       }
     }
     if(canEdit) el.querySelector('#ab-add-grade').addEventListener('click', ()=>{
-      if(cache.students.length===0){ toast('أضف طلابًا أولًا'); return; }
+      if(cache.students.length===0){ toast('لا يوجد طلاب'); return; }
       const modal = document.createElement('div');
       modal.className = 'ab-modal-bg';
       modal.innerHTML = `
@@ -665,19 +662,91 @@ table.ab-table tr:last-child td { border-bottom: none; }
         const score = Number(modal.querySelector('#f-score').value)||0;
         const max = Number(modal.querySelector('#f-max').value)||100;
         if(!subject || !exam){ toast('يرجى إدخال المادة واسم الاختبار'); return; }
-        const newList = (cache.grades[sid]||[]).concat([{subject, exam, score, max}]);
-        try { await db.collection('grades').doc(sid).set({list:newList}); modal.remove(); toast('تم تسجيل الدرجة'); }
-        catch(e){ toast('تعذر الحفظ: '+e.message); }
+        const student = cache.students.find(s=>s.id===sid);
+        const newList = ((cache.grades[sid]||{}).list||[]).concat([{subject, exam, score, max}]);
+        try {
+          await db.collection('grades').doc(sid).set({list:newList, teacherUid: student.teacherUid||null, parentUid: student.parentUid||null}, {merge:true});
+          modal.remove(); toast('تم تسجيل الدرجة');
+        } catch(e){ toast('تعذر الحفظ: '+e.message); }
       });
     });
   }
 
+  // ---------------- PROGRESS (memorization & behavior) ----------------
+  function renderProgress(el){
+    const canEdit = isStaff();
+    el.innerHTML = `
+      <div class="ab-panel">
+        <div class="ab-panel-head"><h2>${isParent()?'حفظ وسلوك أبنائك':'سجل الحفظ والسلوك'}</h2></div>
+        <div class="ab-panel-body" id="ab-progress-body"></div>
+      </div>`;
+    const body = el.querySelector('#ab-progress-body');
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب لعرضهم.</div>`; return; }
+    body.innerHTML = cache.students.map(s=>{
+      const pdoc = cache.progress[s.id] || {};
+      const memo = pdoc.memorization || [];
+      const beh = pdoc.behavior || [];
+      return `<div style="border:1px solid var(--line);margin-bottom:16px">
+        <div style="background:var(--paper-2);padding:10px 14px;font-weight:600;display:flex;justify-content:space-between;align-items:center">
+          <span>${escapeHtml(s.name)} — ${escapeHtml(s.grade||'')}</span>
+          ${canEdit ? `<span>
+            <button class="ab-btn small" data-add-memo="${s.id}">+ حفظ</button>
+            <button class="ab-btn ghost small" data-add-beh="${s.id}">+ سلوك</button>
+          </span>` : ''}
+        </div>
+        <div style="padding:12px 14px">
+          <div style="font-size:12.5px;color:#7a7256;margin-bottom:6px">سجل الحفظ</div>
+          ${memo.length===0 ? `<div style="color:#948c73;font-size:13px;margin-bottom:10px">لا يوجد سجل حفظ بعد.</div>` :
+            memo.slice().reverse().map(m=>`<div style="font-size:13.5px;padding:5px 0;border-bottom:1px solid #f2ead6">📖 ${escapeHtml(m.note)} <span style="color:#948c73;font-size:11.5px">— ${escapeHtml(m.date)}</span></div>`).join('')}
+          <div style="font-size:12.5px;color:#7a7256;margin:12px 0 6px">سجل السلوك والأخلاق</div>
+          ${beh.length===0 ? `<div style="color:#948c73;font-size:13px">لا يوجد سجل سلوك بعد.</div>` :
+            beh.slice().reverse().map(b=>`<div style="font-size:13.5px;padding:5px 0;border-bottom:1px solid #f2ead6">🌱 ${escapeHtml(b.note)} <span style="color:#948c73;font-size:11.5px">— ${escapeHtml(b.date)}</span></div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+
+    if(canEdit){
+      body.querySelectorAll('[data-add-memo]').forEach(b=>b.addEventListener('click', ()=>openProgressModal(b.dataset.addMemo, 'memorization', 'إضافة سجل حفظ', 'مثال: حفظ من الآية 1 إلى 10 من سورة البقرة، تسميع ممتاز')));
+      body.querySelectorAll('[data-add-beh]').forEach(b=>b.addEventListener('click', ()=>openProgressModal(b.dataset.addBeh, 'behavior', 'إضافة ملاحظة سلوك', 'مثال: التزام ممتاز بالأدب مع زملائه هذا الأسبوع')));
+    }
+
+    function openProgressModal(sid, type, title, placeholder){
+      const modal = document.createElement('div');
+      modal.className = 'ab-modal-bg';
+      modal.innerHTML = `
+        <div class="ab-modal">
+          <div class="ab-modal-head"><h3>${title}</h3><button data-close>✕</button></div>
+          <div class="ab-modal-body">
+            <div class="ab-field"><label>الملاحظة</label><input id="f-note" placeholder="${escapeHtml(placeholder)}"></div>
+          </div>
+          <div class="ab-modal-foot"><button class="ab-btn" id="f-save">حفظ</button><button class="ab-btn ghost" data-close>إلغاء</button></div>
+        </div>`;
+      root.appendChild(modal);
+      modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>modal.remove()));
+      modal.querySelector('#f-save').addEventListener('click', async ()=>{
+        const note = modal.querySelector('#f-note').value.trim();
+        if(!note){ toast('اكتب الملاحظة أولاً'); return; }
+        const student = cache.students.find(s=>s.id===sid);
+        const existingDoc = cache.progress[sid] || {};
+        const arr = (existingDoc[type]||[]).concat([{date: todayISO(), note}]);
+        try {
+          await db.collection('progress').doc(sid).set({
+            [type]: arr,
+            teacherUid: student.teacherUid || null,
+            parentUid: student.parentUid || null,
+          }, {merge:true});
+          modal.remove(); toast('تم الحفظ');
+        } catch(e){ toast('تعذر الحفظ: '+e.message); }
+      });
+    }
+  }
+
   // ---------------- FEES ----------------
   function renderFees(el){
-    const canEdit = isStaff();
-    el.innerHTML = `<div class="ab-panel"><div class="ab-panel-head"><h2>متابعة الرسوم الدراسية</h2></div><div class="ab-panel-body" id="ab-fees-body"></div></div>`;
+    const canEdit = isAdmin();
+    el.innerHTML = `<div class="ab-panel"><div class="ab-panel-head"><h2>${isParent()?'رسوم أبنائك':'متابعة الرسوم الدراسية'}</h2></div><div class="ab-panel-body" id="ab-fees-body"></div></div>`;
     const body = el.querySelector('#ab-fees-body');
-    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">أضف طلابًا أولًا.</div>`; return; }
+    if(cache.students.length===0){ body.innerHTML = `<div class="ab-empty">لا يوجد طلاب لعرضهم.</div>`; return; }
     body.innerHTML = `<table class="ab-table"><thead><tr><th>الطالب</th><th>الرسوم الكاملة</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th>${canEdit?'<th></th>':''}</tr></thead><tbody>
       ${cache.students.map(s=>{
         const total = s.feeTotal||0, paid = s.feePaid||0, due = Math.max(0,total-paid);
