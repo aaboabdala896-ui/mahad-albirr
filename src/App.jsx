@@ -134,6 +134,13 @@ function useAppData() {
       }).eq("id", id);
       if (error) throw error;
     }),
+    assignStudent: (id, { teacherId, parentId }) => mutate(async () => {
+      const patch = { updated_at: new Date().toISOString() };
+      if (teacherId !== undefined) patch.teacher_id = teacherId || null;
+      if (parentId !== undefined) patch.parent_id = parentId || null;
+      const { error } = await supabase.from("students").update(patch).eq("id", id);
+      if (error) throw error;
+    }),
     approveRegistration: (reg, teacherId) => mutate(async () => {
       const { error: e1 } = await supabase.from("students").insert({
         name: reg.name, age: Number(reg.age) || 0, teacher_id: teacherId || null, parent_id: null,
@@ -730,13 +737,36 @@ function AdminDashboard({ data, api, user, onLogout }) {
 
       {tab === "students" && (
         <div className="list">
+          {data.students.length === 0 && <div className="empty-note">لا يوجد طلاب بعد.</div>}
           {data.students.map((s) => (
-            <div className="list-row" key={s.id}>
+            <div className="list-row student-assign-row" key={s.id}>
               <div>
                 <div className="list-row-title">{s.name} <span className="muted">· {s.age} سنة</span></div>
                 <div className="list-row-sub">{s.level}</div>
               </div>
-              <div style={{ width: 140 }}><BehaviorBar value={s.behavior} /></div>
+              <div className="assign-selects">
+                <select
+                  className="input input-sm"
+                  value={s.teacherId || ""}
+                  onChange={(e) => api.assignStudent(s.id, { teacherId: e.target.value || null })}
+                >
+                  <option value="">بلا معلم</option>
+                  {data.teachers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <select
+                  className="input input-sm"
+                  value={s.parentId || ""}
+                  onChange={(e) => api.assignStudent(s.id, { parentId: e.target.value || null })}
+                >
+                  <option value="">بلا ولي أمر</option>
+                  {data.parents.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ width: 120 }}><BehaviorBar value={s.behavior} /></div>
             </div>
           ))}
         </div>
@@ -1066,6 +1096,9 @@ export default function App() {
         .danger-zone h4 { color: var(--red-500); font-size: 14px; margin-bottom: 6px; }
         .danger-zone p { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; line-height: 1.7; }
         .btn-danger { background: var(--red-500); color: #fff; }
+        .assign-selects { display: flex; gap: 8px; flex-wrap: wrap; }
+        .input-sm { width: auto; min-width: 150px; padding: 8px 10px; font-size: 12.5px; }
+        .student-assign-row { align-items: center; }
         .footer { text-align: center; padding: 26px; color: var(--muted); font-size: 12.5px; background: var(--surface); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
 
         /* LOGIN */
