@@ -28,6 +28,45 @@ const FONT_IMPORT = `
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@400;500;600;700;800&display=swap');
 `;
 
+/* ============================= SESSION PERSISTENCE =============================
+  مفتاح تخزين الجلسة محليًا. نحفظ فقط الحقول غير الحسّاسة (المعرّف، اسم
+  المستخدم، الدور، الاسم) — لا كلمة المرور — حتى لا يفقد المستخدم دخوله عند
+  تحديث الصفحة أو إغلاقها وإعادة فتحها.
+================================================================================= */
+const SESSION_STORAGE_KEY = "mahad-albirr:session";
+
+const readStoredSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.id && parsed.username && parsed.role) return parsed;
+    return null;
+  } catch (e) {
+    console.error("Failed to read stored session", e);
+    return null;
+  }
+};
+
+const writeStoredSession = (user) => {
+  try {
+    localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ id: user.id, username: user.username, role: user.role, name: user.name })
+    );
+  } catch (e) {
+    console.error("Failed to persist session", e);
+  }
+};
+
+const clearStoredSession = () => {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (e) {
+    console.error("Failed to clear stored session", e);
+  }
+};
+
 const studentFromRow = (r) => ({
   id: r.id, name: r.name, age: r.age, teacherId: r.teacher_id, parentId: r.parent_id,
   level: r.level || "", nextLesson: r.next_lesson || "", behavior: r.behavior ?? 70,
@@ -958,6 +997,58 @@ export default function App() {
   const [view, setView] = useState("home"); // home | login | dashboard
   const [currentUser, setCurrentUser] = useState(null);
   const [registering, setRegistering] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  // عند تحميل التطبيق: تحقّق من وجود جلسة Supabase نشطة عبر supabase.auth.getSession،
+  // ثم استعد دور المستخدم وحالة دخوله من localStorage حتى لا يخرج المستخدم
+  // تلقائيًا عند تحديث الصفحة أو إعادة فتحها.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data: sessionResult, error } = await supabase.auth.getSession();
+        if (error) console.error("supabase.auth.getSession failed", error);
+        const hasActiveSupabaseSession = !!sessionResult?.session;
+
+        const stored = readStoredSession();
+        // نعيد فتح الجلسة محليًا إن وُجدت بيانات محفوظة صالحة الشكل. إن كانت
+        // هناك جلسة Supabase نشطة فعليًا فهذا تأكيد إضافي، وإن لم توجد (لأن
+        // تسجيل الدخول هنا يتم عبر جدول المستخدمين لا Supabase Auth) نعتمد
+        // على الجلسة المحفوظة محليًا وحدها.
+        if (stored) {
+          if (!cancelled) {
+            setCurrentUser(stored);
+            setView("dashboard");
+          }
+        } else if (!hasActiveSupabaseSession) {
+          clearStoredSession();
+        }
+      } catch (e) {
+        console.error("Session restore failed", e);
+        clearStoredSession();
+      } finally {
+        if (!cancelled) setSessionChecked(true);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // بعد وصول بيانات المستخدمين من قاعدة البيانات، تأكد من أن الجلسة
+  // المستعادة من localStorage ما تزال صالحة (المستخدم موجود وبنفس الدور)،
+  // وإلا أنهِ الجلسة تلقائيًا.
+  useEffect(() => {
+    if (!sessionChecked || !currentUser || !data) return;
+    const stillValid = data.users.some(
+      (u) => u.id === currentUser.id && u.username === currentUser.username && u.role === currentUser.role
+    );
+    if (!stillValid) {
+      setCurrentUser(null);
+      setView("home");
+      clearStoredSession();
+    }
+  }, [data, currentUser, sessionChecked]);
 
   const handleRegister = async (form) => {
     setRegistering(true);
@@ -965,8 +1056,18 @@ export default function App() {
     setRegistering(false);
   };
 
-  const handleLogin = (user) => { setCurrentUser(user); setView("dashboard"); };
-  const handleLogout = () => { setCurrentUser(null); setView("home"); };
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    setView("dashboard");
+    writeStoredSession(user);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setView("home");
+    clearStoredSession();
+    supabase.auth.signOut().catch((e) => console.error("supabase.auth.signOut failed", e));
+  };
 
   return (
     <div dir="rtl" className="app-root">
@@ -1169,7 +1270,7 @@ export default function App() {
         }
       `}</style>
 
-      {status === "loading" && (
+      {(status === "loading" || !sessionChecked) && (
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Loader2 size={30} className="spin" color="var(--green-700)" />
         </div>
@@ -1181,7 +1282,7 @@ export default function App() {
         </div>
       )}
 
-      {status === "ready" && data && (
+      {status === "ready" && data && sessionChecked && (
         <>
           <WhatsAppButton />
           {!persistent && (
