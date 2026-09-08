@@ -6,9 +6,11 @@ const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY")!;
 const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY")!;
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com";
 webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...cors } });
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
     const payload = await req.json();
@@ -25,9 +27,7 @@ Deno.serve(async (req) => {
       const { data: a } = await supabase.from("announcements").select("title,body,target_role").eq("id", payload.announcement_id).maybeSingle();
       if (!a) return json({ error: "announcement not found" }, 404);
       title = a.title; body = a.body;
-      const { data: users } = a.target_role === "all"
-        ? await supabase.from("users").select("id").in("role", ["admin", "teacher", "parent"])
-        : await supabase.from("users").select("id").eq("role", a.target_role);
+      const { data: users } = a.target_role === "all" ? await supabase.from("users").select("id").in("role", ["admin", "teacher", "parent"]) : await supabase.from("users").select("id").eq("role", a.target_role);
       userIds = (users || []).map((u) => u.id);
     } else if (payload.type === "attendance") {
       if (sender.role !== "teacher") return json({ error: "only teacher can send attendance notifications" }, 403);
