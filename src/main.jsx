@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./modern.css";
+import "./features.css";
 import "./feature-enhancements.js";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
