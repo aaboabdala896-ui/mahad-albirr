@@ -2,7 +2,7 @@ import { supabase } from "./supabaseClient";
 
 // VAPID public key only. The matching private key stays in Supabase Edge Function secrets.
 const VAPID_PUBLIC_KEY =
-  "BMqHNM8AY7rMj5PSqwfvA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
+  "BMqHNM8AY7rMj5PSqwfvqA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
 
 const SESSION_STORAGE_KEY = "mahad-albirr:session";
 
@@ -49,6 +49,29 @@ async function saveSubscription(userId, subscription) {
   if (error) throw error;
 }
 
+function getDashboardNotificationButtons() {
+  return [...document.querySelectorAll("button")].filter((button) => {
+    const text = button.textContent?.trim() || "";
+    return text === "تفعيل الإشعارات" || text === "🔔 تفعيل الإشعارات" || text === "الإشعارات مفعّلة" || text === "✓ الإشعارات مفعّلة";
+  });
+}
+
+function setDashboardNotificationState(enabled) {
+  getDashboardNotificationButtons().forEach((button) => {
+    if (enabled) {
+      button.textContent = "✓ الإشعارات مفعّلة";
+      button.disabled = true;
+      button.style.cursor = "default";
+      button.title = "الإشعارات مفعّلة على هذا الجهاز";
+    } else {
+      button.textContent = "🔔 تفعيل الإشعارات";
+      button.disabled = false;
+      button.style.cursor = "pointer";
+      button.title = "اضغط لتفعيل الإشعارات";
+    }
+  });
+}
+
 export async function enablePushNotifications() {
   const user = getCurrentUser();
   if (!user) throw new Error("سجّل الدخول أولًا ثم فعّل الإشعارات.");
@@ -69,6 +92,7 @@ export async function enablePushNotifications() {
     }));
 
   await saveSubscription(user.id, subscription);
+  setDashboardNotificationState(true);
   return { ok: true, subscription };
 }
 
@@ -129,10 +153,10 @@ function createNotificationButton(active = false) {
 
 async function syncPushButton() {
   const user = getCurrentUser();
-  const button = document.getElementById("mahad-push-enable");
+  const floatingButton = document.getElementById("mahad-push-enable");
 
   if (!user) {
-    button?.remove();
+    floatingButton?.remove();
     return;
   }
 
@@ -150,7 +174,8 @@ async function syncPushButton() {
         // The browser subscription is the source of truth after refresh.
         // Re-sync it for whichever logged-in account is currently active.
         await saveSubscription(user.id, browserSubscription);
-        createNotificationButton(true);
+        setDashboardNotificationState(true);
+        floatingButton?.remove();
         return;
       }
     }
@@ -159,11 +184,14 @@ async function syncPushButton() {
   }
 
   if (Notification.permission === "denied") {
-    button?.remove();
+    floatingButton?.remove();
     return;
   }
 
-  createNotificationButton(false);
+  // If App.jsx already renders the dashboard button, use that button instead of creating a duplicate.
+  if (getDashboardNotificationButtons().length === 0) {
+    createNotificationButton(false);
+  }
 }
 
 export function initPushNotifications() {
