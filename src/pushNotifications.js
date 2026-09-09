@@ -2,7 +2,7 @@ import { supabase } from "./supabaseClient";
 
 // VAPID public key only. The matching private key stays in Supabase Edge Function secrets.
 const VAPID_PUBLIC_KEY =
-  "BMqHNM8AY7rMj5PSqwfvqA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
+  "BMqHNM8AY7rMj5PSqwfvA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
 
 const SESSION_STORAGE_KEY = "mahad-albirr:session";
 
@@ -72,12 +72,24 @@ export async function enablePushNotifications() {
   return { ok: true, subscription };
 }
 
-function createNotificationButton() {
-  if (document.getElementById("mahad-push-enable")) return;
+function styleNotificationButton(button, active) {
+  button.textContent = active ? "✓ الإشعارات مفعّلة" : "🔔 تفعيل الإشعارات";
+  button.style.background = active ? "#145C43" : "#0B3D2E";
+  button.style.cursor = active ? "default" : "pointer";
+  button.disabled = active;
+  button.title = active ? "الإشعارات مفعّلة على هذا الجهاز" : "اضغط لتفعيل الإشعارات";
+}
+
+function createNotificationButton(active = false) {
+  const existing = document.getElementById("mahad-push-enable");
+  if (existing) {
+    styleNotificationButton(existing, active);
+    return existing;
+  }
+
   const button = document.createElement("button");
   button.id = "mahad-push-enable";
   button.type = "button";
-  button.textContent = "🔔 تفعيل الإشعارات";
   Object.assign(button.style, {
     position: "fixed",
     right: "16px",
@@ -86,23 +98,23 @@ function createNotificationButton() {
     border: "0",
     borderRadius: "999px",
     padding: "12px 18px",
-    background: "#0B3D2E",
     color: "#fff",
     fontFamily: "Cairo, sans-serif",
     fontSize: "14px",
     fontWeight: "700",
     boxShadow: "0 8px 24px rgba(0,0,0,.18)",
-    cursor: "pointer",
+    transition: "all .2s ease",
   });
+  styleNotificationButton(button, active);
+
   button.addEventListener("click", async () => {
+    if (button.disabled) return;
     button.disabled = true;
     const original = button.textContent;
     button.textContent = "جارٍ التفعيل…";
     try {
       await enablePushNotifications();
-      button.textContent = "✓ الإشعارات مفعّلة";
-      button.style.background = "#145C43";
-      setTimeout(() => button.remove(), 1800);
+      styleNotificationButton(button, true);
     } catch (error) {
       console.error("Push setup failed", error);
       button.disabled = false;
@@ -110,7 +122,9 @@ function createNotificationButton() {
       window.alert(error?.message || "تعذر تفعيل الإشعارات.");
     }
   });
+
   document.body.appendChild(button);
+  return button;
 }
 
 async function syncPushButton() {
@@ -126,8 +140,6 @@ async function syncPushButton() {
     return;
   }
 
-  // The browser's PushSubscription is the source of truth after a page refresh.
-  // If it exists, keep Supabase synchronized and do not show the activation button again.
   try {
     const registration = await registerServiceWorker();
 
@@ -135,8 +147,10 @@ async function syncPushButton() {
       const browserSubscription = await registration.pushManager.getSubscription();
 
       if (browserSubscription) {
+        // The browser subscription is the source of truth after refresh.
+        // Re-sync it for whichever logged-in account is currently active.
         await saveSubscription(user.id, browserSubscription);
-        button?.remove();
+        createNotificationButton(true);
         return;
       }
     }
@@ -144,14 +158,12 @@ async function syncPushButton() {
     console.warn("Push subscription sync failed", error);
   }
 
-  // Permission denied means the browser has blocked notifications; don't keep
-  // presenting an activation button that cannot open the permission prompt.
   if (Notification.permission === "denied") {
     button?.remove();
     return;
   }
 
-  createNotificationButton();
+  createNotificationButton(false);
 }
 
 export function initPushNotifications() {
