@@ -172,10 +172,16 @@ async function syncPushButton() {
 
       if (browserSubscription) {
         // The browser subscription is the source of truth after refresh.
-        // Re-sync it for whichever logged-in account is currently active.
-        await saveSubscription(user.id, browserSubscription);
+        // Mark the UI as enabled immediately. Supabase sync is best-effort and
+        // must never cause an already-enabled browser subscription to look disabled.
         setDashboardNotificationState(true);
         floatingButton?.remove();
+
+        try {
+          await saveSubscription(user.id, browserSubscription);
+        } catch (syncError) {
+          console.warn("Could not sync push subscription with Supabase:", syncError);
+        }
         return;
       }
     }
@@ -188,7 +194,6 @@ async function syncPushButton() {
     return;
   }
 
-  // If App.jsx already renders the dashboard button, use that button instead of creating a duplicate.
   if (getDashboardNotificationButtons().length === 0) {
     createNotificationButton(false);
   }
