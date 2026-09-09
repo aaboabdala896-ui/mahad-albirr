@@ -1,10 +1,10 @@
 import { supabase } from "./supabaseClient";
 
-// VAPID public key only. The matching private key stays in Supabase Edge Function secrets.
 const VAPID_PUBLIC_KEY =
   "BMqHNM8AY7rMj5PSqwfvqA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
 
 const SESSION_STORAGE_KEY = "mahad-albirr:session";
+const AUTH_CHANGED_EVENT = "mahad:auth-changed";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -23,9 +23,43 @@ function getCurrentUser() {
   }
 }
 
+// --- Session bridge, used by App.jsx -----------------------------------
+// This is the ONLY place that owns the "mahad-albirr:session" key, so the
+// login screen and the push-notification code can never disagree about
+// whether someone is logged in. Previously nothing in the app ever wrote
+// this key, so getCurrentUser() always returned null after a refresh.
+export function restoreSession() {
+  return getCurrentUser();
+}
+
+export function saveSession(user) {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+  } catch (error) {
+    console.warn("Could not persist session:", error);
+  }
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+}
+
+export function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (error) {
+    console.warn("Could not clear session:", error);
+  }
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+}
+
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) throw new Error("هذا المتصفح لا يدعم Service Worker.");
-  return navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  // register() resolves as soon as a registration OBJECT exists, even if the
+  // worker itself is still "installing". pushManager calls on a
+  // not-yet-active worker are where cross-browser flakiness creeps in, so we
+  // wait for navigator.serviceWorker.ready, which only resolves once there is
+  // an ACTIVE worker controlling this scope. register() is still called
+  // first so a first-time visitor's worker actually gets installed.
+  await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  return navigator.serviceWorker.ready;
 }
 
 async function saveSubscription(userId, subscription) {
@@ -91,7 +125,15 @@ export async function enablePushNotifications() {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     }));
 
-  await saveSubscription(user.id, subscription);
+  // The browser subscription is what actually matters (it's what real push
+  // delivery is keyed on). Supabase sync is best-effort: if it fails here,
+  // syncPushButton() will retry it later, but we must not throw and roll
+  // the UI back to "enable" when the device is already subscribed.
+  try {
+    await saveSubscription(user.id, subscription);
+  } catch (error) {
+    console.warn("Could not sync push subscription with Supabase:", error);
+  }
   setDashboardNotificationState(true);
   return { ok: true, subscription };
 }
@@ -153,10 +195,9 @@ function createNotificationButton(active = false) {
 
 async function syncPushButton() {
   const user = getCurrentUser();
-  const floatingButton = document.getElementById("mahad-push-enable");
 
   if (!user) {
-    floatingButton?.remove();
+    document.getElementById("mahad-push-enable")?.remove();
     return;
   }
 
@@ -171,11 +212,12 @@ async function syncPushButton() {
       const browserSubscription = await registration.pushManager.getSubscription();
 
       if (browserSubscription) {
-        // The browser subscription is the source of truth after refresh.
-        // Mark the UI as enabled immediately. Supabase sync is best-effort and
-        // must never cause an already-enabled browser subscription to look disabled.
+        // The browser subscription is the source of truth: show the
+        // enabled state immediately, and KEEP the button visible rather
+        // than removing it — removing it is what made a page refresh look
+        // like notifications had turned back off.
+        createNotificationButton(true);
         setDashboardNotificationState(true);
-        floatingButton?.remove();
 
         try {
           await saveSubscription(user.id, browserSubscription);
@@ -190,23 +232,34 @@ async function syncPushButton() {
   }
 
   if (Notification.permission === "denied") {
-    floatingButton?.remove();
+    document.getElementById("mahad-push-enable")?.remove();
     return;
   }
 
-  if (getDashboardNotificationButtons().length === 0) {
-    createNotificationButton(false);
-  }
+  createNotificationButton(false);
 }
 
 export function initPushNotifications() {
   if (typeof window === "undefined") return () => {};
 
-  registerServiceWorker().catch((error) => console.warn("Service worker registration failed", error));
-  const interval = window.setInterval(() => {
-    syncPushButton().catch((error) => console.warn("Push UI sync failed", error));
-  }, 1000);
-  syncPushButton().catch((error) => console.warn("Push UI sync failed", error));
+  const runSync = () => syncPushButton().catch((error) => console.warn("Push UI sync failed", error));
 
-  return () => window.clearInterval(interval);
+  // Run once immediately, and again the moment login/logout happens (see
+  // saveSession/clearSession above) or the tab regains focus/visibility —
+  // this reacts instantly instead of waiting on a fixed-interval timer.
+  // A slow background poll is kept only as a safety net (e.g. the browser
+  // permission was changed from the address-bar UI while the tab was open).
+  runSync();
+  window.addEventListener(AUTH_CHANGED_EVENT, runSync);
+  window.addEventListener("focus", runSync);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") runSync();
+  });
+  const interval = window.setInterval(runSync, 30000);
+
+  return () => {
+    window.clearInterval(interval);
+    window.removeEventListener(AUTH_CHANGED_EVENT, runSync);
+    window.removeEventListener("focus", runSync);
+  };
 }
