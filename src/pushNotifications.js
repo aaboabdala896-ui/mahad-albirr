@@ -2,7 +2,7 @@ import { supabase } from "./supabaseClient";
 
 // VAPID public key only. The matching private key stays in Supabase Edge Function secrets.
 const VAPID_PUBLIC_KEY =
-  "BMqHNM8AY7rMj5PSqwfvA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
+  "BMqHNM8AY7rMj5PSqwfvqA6LwpS_TSIKKMQmhFqz24ewgCKS-P9rpfT9qBzFuAIJki2skcOxSn8p6EcVaFhhwod8";
 
 const SESSION_STORAGE_KEY = "mahad-albirr:session";
 
@@ -72,16 +72,6 @@ export async function enablePushNotifications() {
   return { ok: true, subscription };
 }
 
-async function hasSavedSubscription(userId) {
-  const { data, error } = await supabase
-    .from("push_subscriptions")
-    .select("id")
-    .eq("user_id", userId)
-    .limit(1);
-  if (error) return false;
-  return Boolean(data?.length);
-}
-
 function createNotificationButton() {
   if (document.getElementById("mahad-push-enable")) return;
   const button = document.createElement("button");
@@ -126,16 +116,41 @@ function createNotificationButton() {
 async function syncPushButton() {
   const user = getCurrentUser();
   const button = document.getElementById("mahad-push-enable");
+
   if (!user) {
     button?.remove();
     return;
   }
-  if (!("Notification" in window) || !("PushManager" in window) || !window.isSecureContext) return;
 
-  if (Notification.permission === "granted" && (await hasSavedSubscription(user.id))) {
+  if (!("Notification" in window) || !("PushManager" in window) || !window.isSecureContext) {
+    return;
+  }
+
+  // The browser's PushSubscription is the source of truth after a page refresh.
+  // If it exists, keep Supabase synchronized and do not show the activation button again.
+  try {
+    const registration = await registerServiceWorker();
+
+    if (Notification.permission === "granted") {
+      const browserSubscription = await registration.pushManager.getSubscription();
+
+      if (browserSubscription) {
+        await saveSubscription(user.id, browserSubscription);
+        button?.remove();
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn("Push subscription sync failed", error);
+  }
+
+  // Permission denied means the browser has blocked notifications; don't keep
+  // presenting an activation button that cannot open the permission prompt.
+  if (Notification.permission === "denied") {
     button?.remove();
     return;
   }
+
   createNotificationButton();
 }
 
