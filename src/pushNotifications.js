@@ -81,17 +81,7 @@ function getDashboardNotificationButtons() {
 
 function setDashboardNotificationState(enabled) {
   getDashboardNotificationButtons().forEach((button) => {
-    if (enabled) {
-      button.textContent = "✓ الإشعارات مفعّلة";
-      button.disabled = true;
-      button.style.cursor = "default";
-      button.title = "الإشعارات مفعّلة على هذا الجهاز";
-    } else {
-      button.textContent = "🔔 تفعيل الإشعارات";
-      button.disabled = false;
-      button.style.cursor = "pointer";
-      button.title = "اضغط لتفعيل الإشعارات";
-    }
+    styleNotificationButton(button, enabled);
   });
 }
 
@@ -102,7 +92,10 @@ export async function enablePushNotifications() {
   if (!("PushManager" in window)) throw new Error("هذا المتصفح لا يدعم Web Push.");
   if (!window.isSecureContext) throw new Error("الإشعارات تحتاج إلى اتصال HTTPS.");
 
-  const permission = await Notification.requestPermission();
+  const permission =
+    Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
   if (permission !== "granted") throw new Error("لم يتم السماح بالإشعارات.");
 
   const registration = await registerServiceWorker();
@@ -124,11 +117,12 @@ export async function enablePushNotifications() {
 }
 
 function styleNotificationButton(button, active) {
+  button.className = "btn btn-ghost";
   button.textContent = active ? "✓ الإشعارات مفعّلة" : "🔔 تفعيل الإشعارات";
-  button.style.background = active ? "#145C43" : "#0B3D2E";
-  button.style.cursor = active ? "default" : "pointer";
   button.disabled = active;
+  button.style.cursor = active ? "default" : "pointer";
   button.title = active ? "الإشعارات مفعّلة على هذا الجهاز" : "اضغط لتفعيل الإشعارات";
+  button.setAttribute("aria-pressed", active ? "true" : "false");
 }
 
 function createNotificationButton(active = false) {
@@ -138,24 +132,12 @@ function createNotificationButton(active = false) {
     return existing;
   }
 
+  const header = document.querySelector(".dash-header > div:last-child");
+  if (!header) return null;
+
   const button = document.createElement("button");
   button.id = "mahad-push-enable";
   button.type = "button";
-  Object.assign(button.style, {
-    position: "fixed",
-    right: "16px",
-    bottom: "16px",
-    zIndex: "9999",
-    border: "0",
-    borderRadius: "999px",
-    padding: "12px 18px",
-    color: "#fff",
-    fontFamily: "Cairo, sans-serif",
-    fontSize: "14px",
-    fontWeight: "700",
-    boxShadow: "0 8px 24px rgba(0,0,0,.18)",
-    transition: "all .2s ease",
-  });
   styleNotificationButton(button, active);
 
   button.addEventListener("click", async () => {
@@ -174,7 +156,7 @@ function createNotificationButton(active = false) {
     }
   });
 
-  document.body.appendChild(button);
+  header.prepend(button);
   return button;
 }
 
@@ -240,16 +222,4 @@ export function initPushNotifications() {
     window.removeEventListener("focus", runSync);
     document.removeEventListener("visibilitychange", onVisibilityChange);
   };
-}
-
-// App.jsx imports this module but does not need a separate initialization call.
-// Start the push-state synchronizer automatically after the document is ready,
-// so an existing browser subscription is restored immediately after refresh.
-if (typeof window !== "undefined") {
-  const start = () => initPushNotifications();
-  if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
 }
