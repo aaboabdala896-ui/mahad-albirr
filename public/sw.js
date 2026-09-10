@@ -1,7 +1,7 @@
 // Service worker for معهد البر — app shell + Web Push notifications.
 // API/data requests are not intentionally cached as application data.
 
-const CACHE_NAME = "mahad-albirr-shell-v2";
+const CACHE_NAME = "mahad-albirr-shell-v3";
 const APP_SHELL = [
   "/",
   "/index.html",
