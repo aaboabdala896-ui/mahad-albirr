@@ -23,11 +23,6 @@ function getCurrentUser() {
   }
 }
 
-// --- Session bridge, used by App.jsx -----------------------------------
-// This is the ONLY place that owns the "mahad-albirr:session" key, so the
-// login screen and the push-notification code can never disagree about
-// whether someone is logged in. Previously nothing in the app ever wrote
-// this key, so getCurrentUser() always returned null after a refresh.
 export function restoreSession() {
   return getCurrentUser();
 }
@@ -52,12 +47,6 @@ export function clearSession() {
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) throw new Error("هذا المتصفح لا يدعم Service Worker.");
-  // register() resolves as soon as a registration OBJECT exists, even if the
-  // worker itself is still "installing". pushManager calls on a
-  // not-yet-active worker are where cross-browser flakiness creeps in, so we
-  // wait for navigator.serviceWorker.ready, which only resolves once there is
-  // an ACTIVE worker controlling this scope. register() is still called
-  // first so a first-time visitor's worker actually gets installed.
   await navigator.serviceWorker.register("/sw.js", { scope: "/" });
   return navigator.serviceWorker.ready;
 }
@@ -125,10 +114,6 @@ export async function enablePushNotifications() {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     }));
 
-  // The browser subscription is what actually matters (it's what real push
-  // delivery is keyed on). Supabase sync is best-effort: if it fails here,
-  // syncPushButton() will retry it later, but we must not throw and roll
-  // the UI back to "enable" when the device is already subscribed.
   try {
     await saveSubscription(user.id, subscription);
   } catch (error) {
@@ -212,10 +197,6 @@ async function syncPushButton() {
       const browserSubscription = await registration.pushManager.getSubscription();
 
       if (browserSubscription) {
-        // The browser subscription is the source of truth: show the
-        // enabled state immediately, and KEEP the button visible rather
-        // than removing it — removing it is what made a page refresh look
-        // like notifications had turned back off.
         createNotificationButton(true);
         setDashboardNotificationState(true);
 
@@ -244,22 +225,31 @@ export function initPushNotifications() {
 
   const runSync = () => syncPushButton().catch((error) => console.warn("Push UI sync failed", error));
 
-  // Run once immediately, and again the moment login/logout happens (see
-  // saveSession/clearSession above) or the tab regains focus/visibility —
-  // this reacts instantly instead of waiting on a fixed-interval timer.
-  // A slow background poll is kept only as a safety net (e.g. the browser
-  // permission was changed from the address-bar UI while the tab was open).
   runSync();
   window.addEventListener(AUTH_CHANGED_EVENT, runSync);
   window.addEventListener("focus", runSync);
-  document.addEventListener("visibilitychange", () => {
+  const onVisibilityChange = () => {
     if (document.visibilityState === "visible") runSync();
-  });
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
   const interval = window.setInterval(runSync, 30000);
 
   return () => {
     window.clearInterval(interval);
     window.removeEventListener(AUTH_CHANGED_EVENT, runSync);
     window.removeEventListener("focus", runSync);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
   };
+}
+
+// App.jsx imports this module but does not need a separate initialization call.
+// Start the push-state synchronizer automatically after the document is ready,
+// so an existing browser subscription is restored immediately after refresh.
+if (typeof window !== "undefined") {
+  const start = () => initPushNotifications();
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 }
