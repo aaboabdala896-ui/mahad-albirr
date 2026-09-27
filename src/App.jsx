@@ -1870,22 +1870,23 @@ export default function App() {
             allowedRoles={["teacher"]}
             fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>غير مصرح لك بالدخول إلى لوحة المعلم.</div>}
           >
-            {view === "dashboard" && currentUser?.role === "teacher" && (
-              <TeacherDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-            )}
-          </ProtectedView>
-
-          <ProtectedView
-            user={currentUser}
-            allowedRoles={["parent"]}
-            fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>غير مصرح لك بالدخول إلى بوابة ولي الأمر.</div>}
-          >
-            {view === "dashboard" && currentUser?.role === "parent" && (
-              <ParentDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-            )}
-          </ProtectedView>
-        </>
-      )}
-    </div>
+            {view === "dashboard" && currentUser && (
+  <>
+    {currentUser.role === "admin" && (
+      <AdminDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+    )}
+    {currentUser.role === "teacher" && (
+      <TeacherDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+    )}
+    {currentUser.role === "parent" && (
+      <ParentDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+    )}
+    {!["admin", "teacher", "parent"].includes(currentUser.role) && (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        غير مصرح لك بالدخول.
+      </div>
+    )}
+  </>
+)}
   );
 }
