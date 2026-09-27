@@ -1848,4 +1848,26 @@ export default function App() {
             />
           )}
 
-          {view === "dashbo
+          {view === "dashboard" && currentUser && (
+            <>
+              {currentUser.role === "admin" && (
+                <AdminDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+              )}
+              {currentUser.role === "teacher" && (
+                <TeacherDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+              )}
+              {currentUser.role === "parent" && (
+                <ParentDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
+              )}
+              {!["admin", "teacher", "parent"].includes(currentUser.role) && (
+                <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  غير مصرح لك بالدخول.
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
