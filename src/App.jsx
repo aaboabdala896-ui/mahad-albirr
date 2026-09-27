@@ -1359,14 +1359,6 @@ function MobileNav({ role, onHome, onStudents, onReports, onMore }) {
   ))}</nav>;
 }
 
-function ProtectedView({ user, allowedRoles, children, fallback }) {
-  if (!user || !canAccessRole(user, allowedRoles)) {
-    return fallback || null;
-  }
-
-  return children;
-}
-
 /* ============================= APP ROOT ============================= */
 
 export default function App() {
@@ -1855,38 +1847,5 @@ export default function App() {
               pendingCount={data.registrations.filter((r) => r.status === "pending").length}
             />
           )}
-          <ProtectedView
-            user={currentUser}
-            allowedRoles={["admin"]}
-            fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>غير مصرح لك بالدخول إلى لوحة المدير.</div>}
-          >
-            {view === "dashboard" && currentUser?.role === "admin" && (
-              <AdminDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-            )}
-          </ProtectedView>
 
-          <ProtectedView
-            user={currentUser}
-            allowedRoles={["teacher"]}
-            fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>غير مصرح لك بالدخول إلى لوحة المعلم.</div>}
-          >
-            {view === "dashboard" && currentUser && (
-  <>
-    {currentUser.role === "admin" && (
-      <AdminDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-    )}
-    {currentUser.role === "teacher" && (
-      <TeacherDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-    )}
-    {currentUser.role === "parent" && (
-      <ParentDashboard data={data} api={api} user={currentUser} onLogout={handleLogout} />
-    )}
-    {!["admin", "teacher", "parent"].includes(currentUser.role) && (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        غير مصرح لك بالدخول.
-      </div>
-    )}
-  </>
-)}
-  );
-}
+          {view === "dashbo
