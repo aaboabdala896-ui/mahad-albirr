@@ -66,7 +66,6 @@ function useAppData() {
     try {
       clearAppCache();
       if (typeof window !== "undefined") {
-        sessionStorage.clear();
         localStorage.removeItem("mahad-albirr-registrations-cache-v1");
         localStorage.removeItem("mahad-albirr-cache-v1");
       }
