@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   BookOpen, Shield, GraduationCap, Heart, LogIn, LogOut, Users, UserPlus,
   ClipboardCheck, Star, MessageSquare, Calendar, ChevronLeft, Check, X,
@@ -12,7 +12,7 @@ import {
 } from "./lib/session";
 import { canUseNotifications, requestNotificationPermission, showBrowserNotification } from "./lib/notifications";
 import { canAccessRole, getSafeRole, normalizeUser, validateLogin } from "./lib/auth";
-import { attachExistingParentToStudent, createStudentWithParent, findParentByPhone, normalizePhone } from "./lib/studentParentLinking";
+import { attachExistingParentToStudent, createStudentWithParent, findParentByPhone, normalizePhone, phonesMatch } from "./lib/studentParentLinking";
 
 /* ============================= DESIGN TOKENS =============================
   Palette:
@@ -249,6 +249,10 @@ function useAppData() {
     }),
     deleteParent: (id) => mutate(async () => {
       const { error } = await supabase.from("users").delete().eq("id", id);
+      if (error) throw error;
+    }),
+    deleteStudent: (id) => mutate(async () => {
+      const { error } = await supabase.from("students").delete().eq("id", id);
       if (error) throw error;
     }),
     clearDemoData: () => mutate(async () => {
@@ -512,7 +516,7 @@ function HomePage({ onGoLogin, onRegister, registering, pendingCount }) {
             </div>
             <div className="field-row">
               <label className="field-label"><Phone size={14} /> رقم التواصل</label>
-              <input className="input" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="05xxxxxxxx" />
+              <input className="input" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="رقم الجوال بالصيغة الدولية، مثال: +966501234567" />
             </div>
             <div className="field-row">
               <label className="field-label">مستوى الحفظ الحالي</label>
@@ -827,6 +831,11 @@ function AdminDashboard({ data, api, user, onLogout }) {
     await api.deleteParent(id);
   };
 
+  const deleteStudent = async (id) => {
+    if (!window.confirm("هل تريد حذف هذا الطالب نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.")) return;
+    await api.deleteStudent(id);
+  };
+
   const clearDemoData = async () => {
     if (!window.confirm("سيتم حذف الحسابات والطلاب التجريبيين نهائيًا (لن يبقى إلا حساب المدير). هل أنت متأكد؟")) return;
     await api.clearDemoData();
@@ -913,6 +922,7 @@ function AdminDashboard({ data, api, user, onLogout }) {
                 </select>
               </div>
               <div style={{ width: 120 }}><BehaviorBar value={s.behavior} /></div>
+              <button className="btn btn-outline btn-sm" onClick={() => deleteStudent(s.id)}><Trash2 size={14} /> حذف</button>
             </div>
           ))}
         </div>
@@ -1065,6 +1075,8 @@ function TeacherDashboard({ data, api, user, onLogout }) {
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [studentForm, setStudentForm] = useState({ name: "", age: "", gender: teacherGender === "female" ? "female" : "male", parentPhone: "", parentName: "", level: "", nextLesson: "", notes: "" });
   const [phoneStatus, setPhoneStatus] = useState({ loading: false, foundParent: null, mode: "idle" });
+  const parentsRef = useRef(data.parents);
+  parentsRef.current = data.parents;
   const [parentDecision, setParentDecision] = useState(null);
   const [confirmParentLink, setConfirmParentLink] = useState(false);
   const [credentials, setCredentials] = useState(null);
@@ -1089,7 +1101,12 @@ function TeacherDashboard({ data, api, user, onLogout }) {
     const run = async () => {
       setPhoneStatus((prev) => ({ ...prev, loading: true }));
       try {
-        const parent = await findParentByPhone(supabase, phone);
+        let parent = null;
+        try { parent = await findParentByPhone(supabase, phone); } catch { parent = null; }
+        if (!parent) {
+          // احتياط: ابحث محليًا بمطابقة ذكية للرقم (تتجاهل رمز الدولة والصفر الأول) لو اختلفت صيغة التخزين
+          parent = (parentsRef.current || []).find((p) => phonesMatch(p.phone || "", phone)) || null;
+        }
         if (cancelled) return;
         setConfirmParentLink(false);
         setPhoneStatus({ loading: false, foundParent: parent, mode: parent ? "existing" : "new" });
@@ -1180,7 +1197,13 @@ function TeacherDashboard({ data, api, user, onLogout }) {
       setConfirmParentLink(false);
       setParentDecision(null);
     } catch (error) {
-      setParentDecision({ type: "error", message: error.message || "حدث خطأ غير متوقع." });
+      const msg = String(error.message || "");
+      setParentDecision({
+        type: "error",
+        message: msg.includes("idx_parents_phone_unique")
+          ? "رقم الهاتف هذا مسجّل لولي أمر موجود. أعد كتابة الرقم لتظهر رسالة الربط، ثم اضغط «تأكيد الربط»."
+          : (msg || "حدث خطأ غير متوقع."),
+      });
     }
   };
 
@@ -1230,14 +1253,14 @@ function TeacherDashboard({ data, api, user, onLogout }) {
               </div>
               <div className="field-row">
                 <label className="field-label">رقم هاتف ولي الأمر</label>
-                <input className="input" value={studentForm.parentPhone} onChange={(e) => setStudentForm({ ...studentForm, parentPhone: e.target.value })} placeholder="9665xxxxxxxx" />
+                <input className="input" value={studentForm.parentPhone} onChange={(e) => setStudentForm({ ...studentForm, parentPhone: e.target.value })} placeholder="رقم الجوال بالصيغة الدولية، مثال: +966501234567" />
               </div>
               <div className="field-row">
                 <label className="field-label">المستوى الحالي</label>
                 <input className="input" value={studentForm.level} onChange={(e) => setStudentForm({ ...studentForm, level: e.target.value })} />
               </div>
               <div className="field-row">
-                <label className="field-label">درس الغد</label>
+                <label className="field-label">درس الغد (اختياري)</label>
                 <input className="input" value={studentForm.nextLesson} onChange={(e) => setStudentForm({ ...studentForm, nextLesson: e.target.value })} />
               </div>
             </div>
