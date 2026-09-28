@@ -1,28 +1,48 @@
+// يوحّد صيغة أي رقم هاتف بغض النظر عن دولة صاحبه: يبقي على الأرقام فقط،
+// ويزيل رمز الاتصال الدولي "00" إن وُجد في بداية الرقم (مثال: 00966501234567 → 966501234567).
+// لا نفترض أي رمز دولة معيّن هنا، حتى لا تنكسر أرقام الدول غير السعودية.
 export function normalizePhone(rawPhone) {
   if (rawPhone === null || rawPhone === undefined) return "";
 
   const digits = String(rawPhone).replace(/\D/g, "");
   if (!digits) return "";
 
-  if (digits.startsWith("966")) return digits;
-  if (digits.startsWith("0")) return `966${digits.slice(1)}`;
+  return digits.replace(/^00/, "");
+}
 
-  return digits;
+// يقارن رقمين للتأكد أنهما لنفس الشخص، حتى لو اختلفت طريقة كتابتهما
+// (مع/بدون رمز الدولة، مع/بدون صفر في البداية). المقارنة تتم على آخر 9 أرقام
+// (وهو طول كافٍ لتمييز أي رقم جوال في أي دولة تقريبًا) بدل المطابقة الحرفية الكاملة.
+export function phonesMatch(a, b) {
+  const da = normalizePhone(a).replace(/^0+/, "");
+  const db = normalizePhone(b).replace(/^0+/, "");
+  if (!da || !db) return false;
+
+  const shorter = da.length <= db.length ? da : db;
+  const longer = da.length <= db.length ? db : da;
+
+  return shorter.length >= 7 && longer.endsWith(shorter);
 }
 
 export async function findParentByPhone(supabase, rawPhone) {
   const phone = normalizePhone(rawPhone);
   if (!phone) return null;
 
-  const normalized = phone.replace(/^966/, "0");
+  const core = phone.replace(/^0+/, "");
+  const suffix = core.slice(-9);
+  if (!suffix) return null;
+
+  // نجلب كل الأرقام المنتهية بنفس آخر 9 أرقام من قاعدة البيانات مباشرة (بدل التحقق من صيغتين فقط)،
+  // ثم نطابقها بدقّة في الكود لتفادي أي تطابق زائف.
   const { data, error } = await supabase
     .from("parents")
     .select("*")
-    .or(`phone.eq.${phone},phone.eq.${normalized}`)
-    .limit(1);
+    .ilike("phone", `%${suffix}`);
 
   if (error) throw error;
-  return (data && data[0]) || null;
+  if (!data || data.length === 0) return null;
+
+  return data.find((p) => phonesMatch(p.phone, phone)) || null;
 }
 
 export async function createStudentWithParent({
