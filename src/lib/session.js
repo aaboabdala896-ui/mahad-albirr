@@ -3,12 +3,35 @@ const APP_CACHE_KEY = "mahad-albirr-cache-v1";
 const REGISTRATIONS_CACHE_KEY = "mahad-albirr-registrations-cache-v1";
 const NOTIFICATION_TOKEN_KEY = "mahad-albirr-notification-token-v1";
 
+// مدة بقاء تسجيل الدخول بعد إغلاق التطبيق (30 يومًا)
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export function readStoredSession() {
   if (typeof window === "undefined") return null;
-
   try {
-    const raw = window.sessionStorage.getItem(SESSION_KEY);
-    return raw ? JSON.parse(raw) : null;
+    let raw = window.localStorage.getItem(SESSION_KEY);
+
+    // ترحيل الجلسات القديمة المحفوظة في sessionStorage
+    if (!raw) {
+      const legacy = window.sessionStorage.getItem(SESSION_KEY);
+      if (legacy) {
+        window.localStorage.setItem(
+          SESSION_KEY,
+          JSON.stringify({ user: JSON.parse(legacy), savedAt: Date.now() })
+        );
+        window.sessionStorage.removeItem(SESSION_KEY);
+        raw = window.localStorage.getItem(SESSION_KEY);
+      }
+    }
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.user) return null;
+    if (parsed.savedAt && Date.now() - parsed.savedAt > SESSION_MAX_AGE_MS) {
+      window.localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return parsed.user;
   } catch {
     return null;
   }
@@ -16,9 +39,8 @@ export function readStoredSession() {
 
 export function persistSession(user) {
   if (typeof window === "undefined") return;
-
   try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify({ user, savedAt: Date.now() }));
   } catch {
     // Ignore storage quota errors in private browsing or restricted contexts.
   }
@@ -26,8 +48,8 @@ export function persistSession(user) {
 
 export function clearSession() {
   if (typeof window === "undefined") return;
-
   try {
+    window.localStorage.removeItem(SESSION_KEY);
     window.sessionStorage.removeItem(SESSION_KEY);
   } catch {
     // Ignore storage errors.
@@ -36,7 +58,6 @@ export function clearSession() {
 
 export function readAppCache() {
   if (typeof window === "undefined") return null;
-
   try {
     const raw = window.localStorage.getItem(APP_CACHE_KEY);
     return raw ? JSON.parse(raw) : null;
@@ -47,7 +68,6 @@ export function readAppCache() {
 
 export function persistAppCache(data) {
   if (typeof window === "undefined") return;
-
   try {
     window.localStorage.setItem(APP_CACHE_KEY, JSON.stringify(data));
   } catch {
@@ -55,13 +75,12 @@ export function persistAppCache(data) {
   }
 }
 
+// ملاحظة: مسح كاش البيانات لا يمسح جلسة تسجيل الدخول
 export function clearAppCache() {
   if (typeof window === "undefined") return;
-
   try {
     window.localStorage.removeItem(APP_CACHE_KEY);
     window.localStorage.removeItem(REGISTRATIONS_CACHE_KEY);
-    window.sessionStorage.removeItem(SESSION_KEY);
   } catch {
     // Ignore storage cleanup failures.
   }
@@ -69,7 +88,6 @@ export function clearAppCache() {
 
 export function readNotificationToken() {
   if (typeof window === "undefined") return null;
-
   try {
     return window.localStorage.getItem(NOTIFICATION_TOKEN_KEY);
   } catch {
@@ -79,7 +97,6 @@ export function readNotificationToken() {
 
 export function persistNotificationToken(token) {
   if (typeof window === "undefined" || !token) return;
-
   try {
     window.localStorage.setItem(NOTIFICATION_TOKEN_KEY, token);
   } catch {
@@ -89,7 +106,6 @@ export function persistNotificationToken(token) {
 
 export function clearNotificationToken() {
   if (typeof window === "undefined") return;
-
   try {
     window.localStorage.removeItem(NOTIFICATION_TOKEN_KEY);
   } catch {
