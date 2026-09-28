@@ -1071,7 +1071,7 @@ function AdminDashboard({ data, api, user, onLogout }) {
 /* ============================= TEACHER DASHBOARD ============================= */
 
 function TeacherDashboard({ data, api, user, onLogout }) {
-  const teacherGender = user.gender || "male";
+  const teacherGender = data.teachers.find((t) => t.id === user.id)?.gender || user.gender || "male";
   const myStudents = data.students.filter((s) => s.teacherId === user.id && (!teacherGender || s.gender === teacherGender));
   const [selectedId, setSelectedId] = useState(myStudents[0]?.id || null);
   const [saving, setSaving] = useState(false);
