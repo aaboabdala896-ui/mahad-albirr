@@ -209,7 +209,11 @@ function useAppData() {
       if (e1) throw e1;
       const { error: e2 } = await supabase.from("teachers")
         .insert({ id: row.id, name: form.name, subject: form.subject || "تحفيظ القرآن الكريم", gender: form.gender || "male" });
-      if (e2) throw e2;
+      if (e2) {
+        // تراجع: لا نترك حساب معلم بدون سجل في جدول teachers
+        await supabase.from("users").delete().eq("id", row.id);
+        throw e2;
+      }
     }),
     addParent: (form) => mutate(async () => {
       const { data: row, error: e1 } = await supabase.from("users")
