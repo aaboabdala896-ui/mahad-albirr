@@ -1165,7 +1165,12 @@ function TeacherDashboard({ data, api, user, onLogout }) {
         if (!result.ok) throw new Error(result.message || "تعذّر حفظ الطالب.");
         setParentDecision({ type: "success", message: `تم ربط الطالب بحساب ولي الأمر ${parent.name} بنجاح.` });
       } else {
-        const username = `${studentForm.name.replace(/\s+/g, "").toLowerCase()}${Math.floor(Math.random() * 90 + 10)}`;
+        // اسم مستخدم إنجليزي تلقائي: parent + 5 أرقام (مع التأكد أنه غير مستخدم)
+        const taken = new Set((data.users || []).map((u) => u.username));
+        let username = "";
+        do {
+          username = `parent${Math.floor(10000 + Math.random() * 90000)}`;
+        } while (taken.has(username));
         const password = `P@${Math.random().toString(36).slice(2, 8)}`;
         const result = await api.addStudentForTeacher({
           teacherId: user.id,
